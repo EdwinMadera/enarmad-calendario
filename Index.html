@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ENARMAD 2026 · Admin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script>
+tailwind.config={theme:{extend:{
+  fontFamily:{sans:['Inter','sans-serif']},
+  colors:{brand:{50:'#f0f9ff',100:'#e0f2fe',500:'#0ea5e9',600:'#0284c7',700:'#0369a1'}},
+  boxShadow:{'float':'0 2px 8px -1px rgba(0,0,0,0.06)','float-hover':'0 6px 16px -2px rgba(0,0,0,0.1)'}
+}}}
+</script>
+<style>
+:root{--pc:#0ea5e9}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#f1f5f9;color:#1e293b;-webkit-font-smoothing:antialiased;overflow:hidden;height:100vh}
+
+/* ===== LAYOUT: 3-column, single row, no row-span tricks ===== */
+.app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:100vh;height:100vh;transition:grid-template-columns .25s ease}
+.app.has-panel{grid-template-columns:220px 1fr 260px}
+.app.sb-collapsed{grid-template-columns:0px 1fr}
+.app.sb-collapsed.has-panel{grid-template-columns:0px 1fr 260px}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+
+/* ===== SIDEBAR ===== */
+.sidebar{background:#fff;border-right:1px solid #e2e8f0;display:flex;flex-direction:column;overflow:hidden;z-index:20;transition:width .25s ease,opacity .2s}
+.app.sb-collapsed .sidebar{overflow:hidden;opacity:0;pointer-events:none}
+
+/* ===== MAIN ===== */
+.main-area{display:flex;flex-direction:column;overflow:hidden;min-width:0;background:#f1f5f9}
+
+/* ===== TOPBAR (single bar — tabs + filters + progress) ===== */
+.topbar{background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;padding:0 12px;height:44px;flex-shrink:0;z-index:10;overflow-x:auto;overflow-y:hidden}
+.topbar::-webkit-scrollbar{height:0}
+
+/* ===== RIGHT PANEL ===== */
+.rpanel{background:#fff;border-left:1px solid #e2e8f0;display:flex;flex-direction:column;overflow:hidden;transition:opacity .2s}
+.app:not(.has-panel) .rpanel{display:none}
+
+/* ===== CARDS ===== */
+.card{border-radius:8px;padding:6px 8px;margin-bottom:3px;cursor:grab;transition:transform .12s,box-shadow .12s;background:#fff;border:1px solid #e8ecf1;position:relative;overflow:hidden}
+.card:hover{transform:translateY(-1px);box-shadow:0 4px 12px -2px rgba(0,0,0,0.08);z-index:20}
+.card:active{cursor:grabbing;transform:scale(.98)}
+.card.dragging{opacity:.35;border-style:dashed}
+.card.done{opacity:.45}
+.exam-card{background:linear-gradient(135deg,#fef3c7,#fff7ed)!important;border-left:3px solid #f59e0b!important}
+.exam-card .c-nm{color:#92400e!important}
+.act-caso{background:linear-gradient(135deg,#f0fdf4,#dcfce7)!important;border-left:3px solid #16a34a!important}
+.act-caso .c-nm{color:#166534!important}
+.act-inter{background:linear-gradient(135deg,#ecfeff,#cffafe)!important;border-left:3px solid #0891b2!important}
+.act-inter .c-nm{color:#155e75!important}
+.act-repaso{background:linear-gradient(135deg,#fefce8,#fef9c3)!important;border-left:3px solid #ca8a04!important}
+.act-repaso .c-nm{color:#854d0e!important}
+.act-sim{background:linear-gradient(135deg,#fef2f2,#fee2e2)!important;border-left:3px solid #dc2626!important}
+.act-sim .c-nm{color:#991b1b!important}
+.exam-card{background:linear-gradient(135deg,#fef3c7,#fff7ed)!important;border-left:3px solid #f59e0b!important}
+.exam-card .c-nm{color:#92400e!important}
+.act-caso{background:linear-gradient(135deg,#f0fdf4,#dcfce7)!important;border-left:3px solid #16a34a!important}
+.act-caso .c-nm{color:#166534!important}
+.act-inter{background:linear-gradient(135deg,#ecfeff,#cffafe)!important;border-left:3px solid #0891b2!important}
+.act-inter .c-nm{color:#155e75!important}
+.act-repaso{background:linear-gradient(135deg,#fefce8,#fef9c3)!important;border-left:3px solid #ca8a04!important}
+.act-repaso .c-nm{color:#854d0e!important}
+.act-sim{background:linear-gradient(135deg,#fef2f2,#fee2e2)!important;border-left:3px solid #dc2626!important}
+.act-sim .c-nm{color:#991b1b!important}
+.card.done .c-nm{text-decoration:line-through;color:#94a3b8}
+/* Card name: 2 lines clamp */
+.c-nm{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+/* Priority dots */
+.pdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.pdot.pr0{background:#ef4444}.pdot.pr1{background:#f59e0b}.pdot.pr2{background:#d1d5db}
+.card .ca{opacity:0;transition:opacity .12s}
+.card:hover .ca{opacity:1}
+
+/* ===== HOVER PREVIEW POPUP ===== */
+.preview{display:none;position:fixed;z-index:999;width:320px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 20px 50px -10px rgba(0,0,0,.15),0 0 0 1px rgba(0,0,0,.02);padding:14px 16px;pointer-events:none;animation:fadeIn .15s ease}
+.preview.show{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.preview .pv-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.preview .pv-name{font-size:14px;font-weight:700;color:#1e293b;line-height:1.4;margin-bottom:8px;word-break:break-word}
+.preview .pv-row{display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b;margin-bottom:4px}
+.preview .pv-label{font-weight:700;color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:.05em;width:50px;flex-shrink:0}
+.preview .pv-val{font-weight:600;color:#334155}
+.preview .pv-url{font-size:10px;color:#0ea5e9;word-break:break-all;margin-top:4px}
+.preview .pv-divider{height:1px;background:#f1f5f9;margin:8px 0}
+
+/* ===== BOARD ===== */
+#contWrap{flex:1;overflow:auto}
+#cont{overflow-x:auto;overflow-y:auto;padding:12px;height:calc(100vh - 44px)}
+.board-row{display:flex;gap:12px}
+.day-col{width:210px;flex-shrink:0}
+.day-hdr{margin-bottom:6px;position:sticky;top:0;background:#f1f5f9;z-index:5;padding:4px 0}
+.dcol{transition:background .15s;border-radius:10px;padding:6px}
+.dcol.over{background:#eff6ff;outline:2px dashed var(--pc);outline-offset:-2px}
+
+/* ===== CHECKBOX ===== */
+.ck{width:14px;height:14px;border-radius:4px;border:1.5px solid #cbd5e1;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:.12s;background:#fff;color:transparent;flex-shrink:0;font-size:8px}
+.ck:hover{border-color:var(--pc)}
+.ck.on{background:var(--pc);border-color:var(--pc);color:#fff}
+
+/* ===== TOGGLE BTN ===== */
+.toggle-btn{position:fixed;right:12px;bottom:12px;z-index:50;width:36px;height:36px;border-radius:50%;background:#fff;color:#64748b;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s}
+.toggle-btn:hover{background:#f8fafc;box-shadow:0 4px 12px rgba(0,0,0,.12);transform:translateY(-1px)}
+
+/* ===== INPUTS ===== */
+select,input[type=text],input[type=url],textarea{appearance:none;background:#f8fafc;border:1px solid #e2e8f0;color:#334155;font-family:inherit}
+select{background-image:url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");background-position:right 4px center;background-repeat:no-repeat;background-size:1.2em}
+select:focus,input:focus,textarea:focus{border-color:var(--pc);outline:none;background:#fff;box-shadow:0 0 0 2px rgba(14,165,233,.1)}
+
+/* ===== TOAST ===== */
+#toast{transition:opacity .3s,transform .3s}
+
+/* ===== PANEL ITEMS ===== */
+.rp-item{cursor:grab;transition:all .15s}
+.rp-item:hover{background:#f8fafc;border-color:#cbd5e1;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.rp-item.dragging{opacity:.3}
+
+.idx-tronco{margin-bottom:8px}
+.idx-tronco-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:13px;font-weight:800;color:#1e293b;user-select:none}
+.idx-tronco-hdr:hover{background:#f1f5f9}
+.idx-tronco-hdr .arrow{font-size:9px;width:12px;color:#94a3b8}
+.idx-tronco-hdr .cnt{margin-left:auto;font-size:10px;font-weight:600;color:#94a3b8}
+.idx-area{margin:0 0 0 16px}
+.idx-area-hdr{display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:700;color:#475569;border-radius:4px;user-select:none}
+.idx-area-hdr:hover{background:#f1f5f9}
+.idx-area-hdr .arrow{font-size:8px;width:10px;color:#94a3b8}
+.idx-area-hdr .cnt{margin-left:auto;font-size:9px;font-weight:600;color:#94a3b8;background:#f1f5f9;padding:1px 6px;border-radius:8px}
+.idx-table{width:100%;border-collapse:collapse;margin:4px 0 8px 8px;font-size:11px}
+.idx-table th{text-align:left;font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid #e2e8f0}
+.idx-table td{padding:3px 6px;border-bottom:1px solid #f1f5f9}
+.idx-table tr:hover{background:#f8fafc}
+.idx-tema{font-weight:500;color:#334155;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.idx-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+.idx-dot.has{background:#10b981}
+.idx-dot.pend{background:#f59e0b}
+.idx-dot.miss{background:#e2e8f0}
+.idx-search{width:100%;padding:8px 12px 8px 36px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;background:#fff}
+.idx-search:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+
+.idx-tronco{margin-bottom:8px}
+.idx-tronco-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:13px;font-weight:800;color:#1e293b;user-select:none}
+.idx-tronco-hdr:hover{background:#f1f5f9}
+.idx-tronco-hdr .arrow{font-size:9px;width:12px;color:#94a3b8}
+.idx-tronco-hdr .cnt{margin-left:auto;font-size:10px;font-weight:600;color:#94a3b8}
+.idx-area{margin:0 0 0 16px}
+.idx-area-hdr{display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:700;color:#475569;border-radius:4px;user-select:none}
+.idx-area-hdr:hover{background:#f1f5f9}
+.idx-area-hdr .arrow{font-size:8px;width:10px;color:#94a3b8}
+.idx-area-hdr .cnt{margin-left:auto;font-size:9px;font-weight:600;color:#94a3b8;background:#f1f5f9;padding:1px 6px;border-radius:8px}
+.idx-table{width:100%;border-collapse:collapse;margin:4px 0 8px 8px;font-size:11px}
+.idx-table th{text-align:left;font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid #e2e8f0}
+.idx-table td{padding:3px 6px;border-bottom:1px solid #f1f5f9}
+.idx-table tr:hover{background:#f8fafc}
+.idx-tema{font-weight:500;color:#334155;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.idx-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+.idx-dot.has{background:#10b981}
+.idx-dot.pend{background:#f59e0b}
+.idx-dot.miss{background:#e2e8f0}
+.idx-search{width:100%;padding:8px 12px 8px 36px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;background:#fff}
+.idx-search:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.plat{font-size:9px;margin-left:1px;vertical-align:middle}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+<!-- ========== SIDEBAR (220px) ========== -->
+<div class="sidebar">
+  <!-- Brand -->
+  <div class="h-11 px-3 flex items-center gap-2.5 border-b border-slate-100 shrink-0">
+    <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-xs shadow-sm">E</div>
+    <div class="flex-1 min-w-0">
+      <div class="text-[12px] font-bold text-slate-800 leading-tight">ENARMAD 2026</div>
+      <div class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Admin</div>
+    </div>
+    <button class="w-6 h-6 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center shrink-0 transition-all" onclick="toggleSidebar()" title="Ocultar menú">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </button>
+  </div>
+  <!-- Stats mini -->
+  <div class="px-3 py-2 border-b border-slate-100 shrink-0">
+    <div class="grid grid-cols-4 gap-1">
+      <div class="text-center py-1"><div class="text-[9px] text-slate-400 font-bold">Total</div><div class="text-sm font-black text-slate-700" id="sTotal">0</div></div>
+      <div class="text-center py-1"><div class="text-[9px] text-emerald-500 font-bold">Hechas</div><div class="text-sm font-black text-emerald-600" id="sDone">0</div></div>
+      <div class="text-center py-1"><div class="text-[9px] text-amber-500 font-bold">Faltan</div><div class="text-sm font-black text-amber-600" id="sPend">0</div></div>
+      <div class="text-center py-1"><div class="text-[9px] text-blue-500 font-bold">Sem</div><div class="text-sm font-black text-blue-600" id="sWeek">0</div></div>
+    </div>
+  </div>
+  <!-- Week nav -->
+  <div class="flex-1 overflow-y-auto px-2 py-1" id="sbNav"></div>
+  <!-- Actions -->
+  <div class="px-3 py-2 border-t border-slate-100 shrink-0 flex flex-col gap-1.5">
+    <button class="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold rounded-md transition-colors flex items-center justify-center gap-1.5" onclick="exportExcel()">
+      <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Excel
+    </button>
+    <div class="flex gap-1">
+      <button class="flex-1 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md" onclick="exportJSON()">Guardar</button>
+      <button class="flex-1 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md" onclick="document.getElementById('impF').click()">Cargar</button>
+    </div>
+    <input type="file" id="impF" class="hidden" accept=".json" onchange="importJSON(event)">
+    <button class="w-full py-1 text-slate-400 hover:text-red-500 text-[10px] transition-colors" onclick="resetCal()">Restaurar</button>
+  </div>
+</div>
+
+<!-- ========== MAIN AREA ========== -->
+<div class="main-area">
+  <!-- SINGLE TOPBAR: Tabs + Filters + Progress — all in one row -->
+  <div class="topbar" id="topbar">
+    <!-- Sidebar toggle -->
+    <button class="w-7 h-7 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700 flex items-center justify-center shrink-0 transition-all text-sm font-bold" onclick="toggleSidebar()" title="Menú" id="sbToggle">☰</button>
+    <!-- Calendar selector -->
+    <div class="flex bg-slate-100 p-0.5 rounded-md shrink-0" id="calTabs"></div>
+    <div class="w-px h-5 bg-slate-200 shrink-0"></div>
+    <!-- Phase tabs -->
+    <div class="flex gap-1 shrink-0" id="pTabs"></div>
+    <div class="w-px h-5 bg-slate-200 shrink-0"></div>
+    <!-- Search -->
+    <div class="relative shrink-0">
+      <svg class="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      <input id="fQ" placeholder="Buscar..." class="w-28 pl-7 pr-2 py-1 text-[11px] rounded-md border border-slate-200 bg-slate-50 font-medium" oninput="render()">
+    </div>
+    <!-- View toggle -->
+    <div class="flex bg-slate-100 p-0.5 rounded-md shrink-0">
+      <button id="vCal" onclick="setView('cal')" class="px-2.5 py-1 text-[10px] font-bold rounded transition-all bg-white text-slate-700 shadow-sm">Calendario</button>
+      <button id="vIdx" onclick="setView('idx')" class="px-2.5 py-1 text-[10px] font-bold rounded transition-all text-slate-400">Índice Maestro</button>
+    </div>
+    <!-- Filters popover -->
+    <div class="relative shrink-0" id="filterWrap">
+      <button class="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300" onclick="toggleFilters()" id="filterBtn">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+        <span>Filtros</span>
+        <span class="w-4 h-4 rounded-full bg-blue-500 text-white text-[8px] font-bold items-center justify-center hidden" id="filterCount">0</span>
+      </button>
+      <div class="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl p-3 z-50 hidden min-w-[220px]" id="filterPop">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider">Filtros</span>
+          <button onclick="clearFilters()" class="text-[9px] font-bold text-slate-400 hover:text-red-500 transition-colors">Limpiar</button>
+        </div>
+        <div class="flex flex-col gap-2">
+          <select id="fTr" class="text-[11px] font-semibold rounded-md px-2 py-1.5 border border-slate-200 bg-slate-50 w-full" onchange="render();upFilterCount()"><option value="">Tronco</option></select>
+          <select id="fAr" class="text-[11px] font-semibold rounded-md px-2 py-1.5 border border-slate-200 bg-slate-50 w-full" onchange="render();upFilterCount()"><option value="">Área</option></select>
+          <select id="fTi" class="text-[11px] font-semibold rounded-md px-2 py-1.5 border border-slate-200 bg-slate-50 w-full" onchange="render();upFilterCount()"><option value="">Tipo</option></select>
+          <select id="fPr" class="text-[11px] font-semibold rounded-md px-2 py-1.5 border border-slate-200 bg-slate-50 w-full" onchange="render();upFilterCount()"><option value="">Prioridad</option></select>
+          <select id="fEs" class="text-[11px] font-semibold rounded-md px-2 py-1.5 border border-slate-200 bg-slate-50 w-full" onchange="render();upFilterCount()"><option value="">Estado</option></select>
+        </div>
+      </div>
+    </div>
+    <!-- Sort toggle -->
+    <button id="btnSortType" onclick="sortByType=!sortByType;updSortBtn();render();" class="text-[9px] font-bold px-2 py-1 rounded-md border transition-all shrink-0" title="Ordenar por tipo de actividad">Ev primero</button>
+    <!-- Spacer -->
+    <div class="flex-1 min-w-2"></div>
+    <!-- Mini stats -->
+    <div class="flex gap-1.5 shrink-0 items-center">
+      <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded" id="csG">0</span>
+      <span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded" id="csY">0</span>
+      <span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded" id="csX">0</span>
+    </div>
+    <div class="w-px h-5 bg-slate-200 shrink-0"></div>
+    <!-- Progress -->
+    <div class="flex items-center gap-1.5 shrink-0">
+      <span id="pPct" class="text-[11px] font-bold text-slate-700">0%</span>
+      <div class="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden"><div class="h-full rounded-full transition-all duration-500" id="pFill" style="background:var(--pc)"></div></div>
+      <span id="pNum" class="text-[9px] font-bold text-slate-400"></span>
+    </div>
+    <div class="w-px h-5 bg-slate-200 shrink-0"></div>
+    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0 whitespace-nowrap" id="cdEl"></div>
+  </div>
+
+  <!-- KANBAN BOARD -->
+  <div id="contWrap">
+    <div id="cont"></div>
+  </div>
+<div id="idxWrap" style="display:none;flex:1;overflow:auto;padding:16px"><div id="idxCont"></div></div>
+</div>
+
+<!-- ========== RIGHT PANEL (260px) ========== -->
+<div class="rpanel" id="rpanel">
+  <div class="px-3 py-2.5 border-b border-slate-100 shrink-0">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-[10px] font-extrabold text-slate-600 uppercase tracking-widest">Disponibles</span>
+      <span class="text-[10px] font-bold text-slate-400" id="rpCount">0</span>
+    </div>
+    <input id="rpQ" placeholder="Filtrar temas..." class="w-full pl-2.5 pr-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-medium outline-none transition-all" oninput="renderPanel()">
+    <div class="flex flex-wrap gap-1 mt-2" id="rpFilters"></div>
+  </div>
+  <div class="flex-1 overflow-y-auto px-2 py-1" id="rpList"></div>
+</div>
+
+</div>
+
+<!-- Hover Preview Popup -->
+<div class="preview" id="preview"></div>
+
+<!-- Toggle panel button -->
+<button class="toggle-btn" id="toggleBtn" onclick="togglePanel()" title="Panel de temas">
+  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+</button>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-lg text-xs font-semibold z-[100] opacity-0 pointer-events-none translate-y-2 flex items-center gap-2">
+  <span id="toastMsg"></span>
+</div>
+
+<!-- Edit Modal -->
+<div class="fixed inset-0 bg-black/20 backdrop-blur-sm z-[200] hidden items-center justify-center" id="editMo">
+  <div class="bg-white rounded-xl w-full max-w-md shadow-xl border border-slate-100 overflow-hidden" id="moContent">
+    <div class="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+      <h3 class="text-xs font-bold text-slate-700 truncate pr-4" id="moTitle">Editar</h3>
+      <button onclick="closeMo()" class="text-slate-400 hover:text-slate-600 p-0.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <div class="p-5 space-y-3">
+      <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Nombre</label><input id="eNom" class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-sm font-semibold text-slate-800"></div>
+      <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">URL</label><input id="eUrl" type="url" placeholder="https://..." class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-xs"></div>
+      <div class="grid grid-cols-3 gap-3">
+        <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tipo</label><select id="eTi" class="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-semibold"></select></div>
+        <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Estado</label><select id="eEs" class="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-semibold"></select></div>
+        <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Prioridad</label><select id="ePr" class="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-semibold"></select></div>
+      </div>
+      <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Notas</label><textarea id="eNota" rows="2" class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-xs resize-none" placeholder="..."></textarea></div>
+    </div>
+    <div class="px-5 py-3 border-t border-slate-100 flex justify-between bg-slate-50">
+      <button class="px-3 py-1.5 text-[10px] font-bold text-red-500 bg-white border border-red-200 hover:bg-red-50 rounded-md" id="moDelBtn" onclick="delCard()">Eliminar</button>
+      <div class="flex gap-2">
+        <button class="px-3 py-1.5 text-[10px] font-bold text-slate-500 bg-white border border-slate-200 hover:bg-slate-100 rounded-md" onclick="closeMo()">Cancelar</button>
+        <button class="px-4 py-1.5 text-[10px] font-bold text-white bg-slate-800 hover:bg-slate-700 rounded-md shadow-sm" onclick="saveMo()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const AC=['#3b82f6','#10b981','#8b5cf6','#f97316','#0ea5e9','#f43f5e','#84cc16','#d946ef','#14b8a6','#eab308','#a855f7','#ec4899','#06b6d4','#f59e0b','#6366f1','#64748b','#22c55e','#e11d48','#0d9488','#7c3aed','#f472b6','#facc15','#38bdf8','#fb923c','#818cf8','#4ade80','#f87171','#2dd4bf','#a3e635','#c084fc','#fbbf24','#34d399','#60a5fa','#fb7185','#a78bfa','#4bc0c0','#ff6384','#36a2eb','#ffce56','#9966ff','#ff9f40','#c9cbcf','#e7e5e4','#a8a29e','#78716c','#57534e','#44403c','#292524','#1c1917','#0c0a09','#fafaf9'];
+let R=null;
+const TN=["Evidencias","Flashcards","Res\u00famenes","Caso Interactivo","Interactiva","Tarjetas Repaso","Examen Semanal","Simulador"];
+const TE=["\ud83d\udcc4","\ud83d\uddc2\ufe0f","\ud83d\udcdd","\ud83e\ude7a","\ud83e\udde9","\ud83c\udccf","\u26a0\ufe0f","\ud83c\udfaf"];
+const TS=["Ev","Fl","Re","Ca","In","Ta","Ex","Si"];
+const PR=["Prioritario","Relevante","B\u00e1sico"];
+const DI=["Lun","Mar","Mi\u00e9","Jue","Vie","S\u00e1b","Dom"];
+const ES=["En plataforma","Pendiente","Drive","No existe"];
+const EI=["\u2713","!","!","-"];
+const ENARM=new Date(2026,8,20);
+/* Canonical troncos & 30 áreas from master list */
+const CTRONCOS=["Medicina interna","Cirugía","Pediatría","GyO"];
+const CAREAS=["Angiología","Cardiología","Cirugía general","Cirugía pediátrica","Coloproctología","Crecimiento y desarollo","Dermatología","Endocrinología","Gastroenterología","Genética","Geriatría","Ginecología general","Hematología","Infectología","Infectología Pediátrica","Nefrología","Neonatología","Neumología","Neurología","ORL","Obstetricia general","Oftalmología","Pediatría general","Psiquiatría","Reumatología","Riesgo obstétrico","TyO","Urgencias médicas","Urgencias quirurgicas","Urología"];
+const CATALOG={"Medicina interna": {"Cardiología": ["Arritmias ventriculares (Fibrilación ventricular)", "Bradiarritmias (Bradicardias y bloqueos AV)", "Cardiomiopatías", "Cor pulmonale (Hipertensión arterial pulmonar)", "Edema agudo pulmonar", "Endocarditis", "Fibrilación auricular", "Fiebre reumática", "Hipertensión arterial sistémica", "Hipotensión ortostática", "Insuficiencia cardíaca aguda", "Insuficiencia cardíaca crónica", "Pericarditis", "SCACEST (Infarto agudo de miocardio)", "SCASEST (Enfermedad coronaria / rehabilitación cardíaca)", "Síndromes de preexcitación (Síndrome de Wolff–Parkinson–White)", "Taquicardia supraventricular (Taquicardias en general) (Fibrilación auricular)", "Valvulopatía aórtica (estenosis aórtica / insuficiencia aórtica)", "Valvulopatía mitral (estenosis mitral / insuficiencia mitral)"], "Dermatología": ["Acné", "Alopecia", "Candidiasis cutáneas (Intertrigo candidiásico)", "Carcinoma basocelular", "Carcinoma epidermoide (Cáncer espinocelular)", "Dermatitis atópica", "Dermatitis por contacto", "Dermatitis seborreica", "Erisipela", "Escabiosis (sarna)", "Impétigo", "Infecciones de piel", "Lepra", "Liquen plano", "Melanoma cutáneo", "Molusco contagioso", "Pénfigo vulgar", "Pitiriasis rosada de Gibert", "Pitiriasis versicolor", "Psoriasis", "Rosácea", "Sarcoma de Kaposi", "SSJ & NET", "Tiñas (dermatofitosis)", "Toxicodermias (Eritema multiforme)", "Trastornos de pigmentación (Vitíligo y melasma)", "Urticaria"], "Endocrinología": ["Acromegalia", "Cáncer de tiroides", "Cetoacidosis diabética", "Diabetes insípida", "Diabetes Mellitus tipo 1", "Diabetes Mellitus tipo 2", "Dislipidemias y riesgo cardiovascular", "Estado Hiperglucémico Hiperosmolar", "Feocromocitoma", "Hiperaldosteronismo", "Hiperparatiroidismo", "Hiperprolactinemia", "Hipertiroidismo", "Hipoglucemia", "Hipopituitarismo (Síndrome de Sheehan)", "Hipotiroidismo", "Insuficiencia suprarrenal primaria (Enfermedad de Addison)", "Neoplasia endocrina múltiple", "Nódulo tiroideo", "Obesidad", "Pie diabético", "SIADH", "Síndrome de cushing (Enfermedad de Cushing)", "Síndrome metabólico"], "Gastroenterología": ["Absceso hepático amebiano", "Absceso hepático piógeno", "Acalasia", "Cáncer de esófago", "Cáncer de páncreas", "Cáncer gástrico", "Carcinoma hepatocelular", "Cirrosis hepática / Insuficiencia hepática", "Colangiocarcinoma", "Diarrea aguda en adultos (Intoxicación alimentaria)", "Dispepsia funcional", "Divertículo de Zenker", "EHGNA", "Enfermedad ácido-péptica", "Enfermedad celíaca", "Enfermedad de Wilson", "ERGE (Esofago de barret)", "Esofagitis (con eosinofílica)", "Esprúe tropical", "Hepatitis autoinmune", "Hipertensión arterial (Varices esofágicas)", "Pancreatitis aguda", "Pancreatitis crónica", "Síndrome de intestino irritable", "Síndrome de Zollinger–Ellison"], "Geriatría": ["Delirium", "Depresión en el adulto mayor", "Deterioro cognitivo / demencias (frontotemporal, lewy y vascular).", "Diabetes en el adulto mayor", "Enfermedad de Alzheimer", "Insomnio en adulto mayor", "Maltrato en adulto mayor", "Polifarmacia", "Sarcopenia", "Síndrome de caídas", "Síndrome de fragilidad", "Sobrecarga del cuidador (colapso del cuidador)", "Úlceras por presión", "Valoración geriátrica (escalas geríatricas)"], "Hematología": ["Anemia aplásica", "Anemia ferropenica", "Anemia hemolítica", "Anemia por deficiencia G6PD", "Anemias megaloblásticas (Anemia perniciosa - anemia por deficiencia de folato)", "Coagulación intravascular diseminada", "Drepanocitosis (Enfermedad de células falciformes)", "Enfermedad de Von Willebrand", "Esferocitosis", "Hemofilias", "Hemoglobinuria paroxística nocturna", "Introducción a hematología (Anemias generalidades)", "Leucemia linfoblástica aguda", "Leucemia linfocítica crónica", "Leucemia mieloide aguda", "Leucemia mieloide crónica", "Linfoma de Hodgkin", "Linfoma no Hodgkin", "Mieloma múltiple", "Policitemia vera", "Púrpura trombótica trombocitopénica", "Síndrome de lisis tumoral", "Síndrome hemolítico urémico", "Talasemias", "Tiflitis / Neutropenia febril", "Trombocitopenia inmune"], "Infectología": ["Actinomicosis", "Amebiasis intestinal", "Anquilostomiasis", "Aspergilosis", "Brucelosis", "Chancroide", "Chikungunya (Enf. por vectores).", "Cisticercosis", "Coccidioidomicosis", "Criptococosis", "Dengue", "Difteria", "Ébola", "Enfermedad de Chagas", "Enfermedad de Lyme", "Esporotricosis", "Estrongiloidiasis", "Fiebre amarilla", "Filariasis linfática", "Giardiasis", "Gonorrea", "Granuloma inguinal", "Hepatitis A", "Hepatitis B", "Hepatitis C", "Herpes genital", "Herpes Zóster", "Histoplasmosis", "Infección de vías urinarias", "Introducción a infectología - Medios de cultivo", "Leishmaniasis", "Leptospirosis", "Linfogranuloma venéreo", "Loasis", "Miasis por Gusano Barrenador del Ganado", "Oncocercosis", "Paludismo", "Rabia", "Rickettsiosis", "Salmonella", "Sífilis (ETS generalidades)", "Tétanos", "Toxoplasmosis", "Vigilancia epidemiológica", "VIH en adultos", "Viruela símica", "Virus del papiloma humano", "Zika"], "Nefrología": ["Enfermedad de Fabry", "Enfermedad poliquística dominante.", "Enfermedad renal crónica (Nefropatía diabética)", "Glomerulopatías (Nefritis lúpica - GNRP)", "Lesión renal aguda (Necrosis tubular aguda)", "Peritonitis en diálisis peritoneal", "Rabdomiólisis", "Síndrome goodpasture", "Síndrome nefrítico", "Síndrome nefrótico", "Trasplante renal", "Trastorno ácido-base", "Trastornos hidroelectrolíticos (Hipercalcemia, hiperkalemia, hipernatremia, hipocalcemia, hipokalemia y hiponatremia)", "Trastornos tubulares renales (Acidosis tubular renal)"], "Neumología": ["Asma en adultos (asma en niños)", "Bronquitis aguda", "Cáncer de pulmón", "COVID-19", "Deficiencia de alfa-1 antitripsina", "Derrame pleural", "EPOC", "Influenza", "Mesotelioma", "NAC en adultos (Neumonía atípica)", "Neumocistosis", "Neumoconiosis", "Sarcoidosis", "SAOS (apnea obstructiva del sueño)", "Tabaquismo", "Tromboembolia pulmonar", "Tuberculosis pulmonar"], "Neurología": ["Absceso cerebral", "Ataxia de Friedreich", "Cefalea primarias (Cefalea tensional)", "Crisis de ausencia", "Distrofia muscular de Duchenne", "Encefalitis", "Encefalopatía de Wernicke", "Enfermedad de Huntington", "Enfermedad de Parkinson", "Epilepsia en adultos (estatus epiléptico)", "Epilepsias específicas (Síndrome de Dravet, West, Lennox y Janz).", "Esclerosis múltiple", "EVC isquémico (EVC hemorrágico)", "Hemorragia subaracnoidea", "Hernia de disco", "Hidrocefalea", "Lumbalgia", "Meningitis", "Miastenia gravis (Síndrome de Lambert-Eaton)", "Migraña", "Neuralgia del trigémino", "Síndrome de Guillain-Barré", "Tumores en SNC"], "Psiquiatría": ["Abuso de sustancias (abuso de marihuana)", "Depresión mayor", "Esquizofrenia", "Intento de autolisis", "Síndrome de abstinencia alcohólica", "Síndrome de Münchhausen", "TDAH", "Trastorno bipolar", "Trastorno de estrés postraumático (Estres post traumatico)", "Trastorno por uso de alcohol (Abuso de alcohol)", "Trastornos de ansiedad (trastorno obsesivo compulsivo)", "Trastornos de conducta alimentaria", "Trastornos de sueño (Insomnio en adultos)"], "Reumatología": ["Arteritis de la temporal de células gigantes", "Arteritis de Takayasu", "Artritis enteropática", "Artritis idiopática juvenil", "Artritis psoriásica", "Artritis reactiva", "Artritis reumatoide", "Artritis séptica", "Enfermedad de Behçet", "Enfermedad de Paget ósea", "Esclerosis sistémica", "Espondilitis anquilosante", "Fibromialgia", "Gota", "Granulomatosis de Wegener", "Lupus eritematoso sistémico (Lupus neonatal)", "Miopatías inflamatorias", "Osteoporosis post menopausia", "Poliarteritis nodosa", "Púrpura de Henoch–Schönlein", "Síndrome antifosfolípidos", "Síndrome de Churg–Strauss", "Síndrome de Sjögren"], "Urgencias médicas": ["Ahogamiento", "Anafilaxia (Reacciones de hipersensibilidad)", "Crisis y emergencia hipertensiva", "Golpe de calor", "Ingesta de cáusticos (Intoxicación por cáusticos)", "Intoxicación de monóxido de carbono.", "Intoxicación por alcoholes (etanol)", "Intoxicación por hidrocarburos", "Intoxicación por metales (Intoxicación plomo)", "Intoxicación por metanfetaminas", "Intoxicación por organosfosforados", "Intoxicación por paracetamol", "Intoxicación por salicilatos", "Manejo de intoxicaciones", "Mordedura de latrodectus", "Mordedura de loxosceles", "Mordedura de serpiente", "Picadura de alacrán", "Picadura por himenópteros", "RCP adultos", "Sepsis / choque séptico", "Soporte vital básico / BLS", "STDA (Síndrome de Mallory-Weiss)", "STDB", "Toxíndrome de alucinógenos (Intoxicación por DMT)", "Toxíndrome opioide (Intoxicación por opiáceos - Fentanilo)", "Toxíndrome sedativo hipnótico (Intoxicación por benzodiacepinas)", "Toxíndromes", "TRIAGE"]}, "Cirugía": {"Angiología": ["Aneurisma de aorta abdominal", "Disección aórtica (incluya ATLS)", "Enfermedad arterial periférica", "Insuficiencia venosa crónica", "Isquemia intestinal aguda", "Tromboembolia venosa en obstetricia", "Trombosis venosa profunda"], "Cirugía general": ["Apendicitis aguda (adenitis mesénterica)", "Catéter venoso central", "Colangitis", "Colecistitis aguda", "Colédocolitiasis", "Fascitis necrosante", "Fístulas biliointestinales (íleo biliar)", "Heridas quirúrgicas (infeccion de herida qx)", "Hernia generalidades", "Hernia hiatal", "Hernia inguinal (femoral)", "Hernia umbilical", "Hernia ventral", "Laparoscopia", "Oclusión intestinal (Ileo)", "Patología biliar (colelitiasis)", "Síndrome doloroso abdominal"], "Coloproctología": ["Absceso anal", "Cáncer colorrectal (Síndrome de Lynch)", "Colitis ulcerativa", "Enfermedad de Crohn", "Enfermedad diverticular", "Enfermedad hemorroidal", "Fístula anal", "Fisura anal", "Quiste pilonidal", "Vólvulo intestinal (Vólvulo sigmoides, vólvulo ciego)"], "Oftalmología": ["Ametropías", "Blefaritis", "Catarata", "Celulitis ocular", "Conjuntivitis (viral, alégica y bacterina)", "Degeneración macular relacionada con la edad", "Desprendimiento de retina", "Endoftalmitis", "Estrabismo", "Glaucoma (glaucoma ángulo abierto y cerrado)", "Hemorragia vítrea", "Hipertensión intraocular (Sospecha de glaucoma)", "Hiposfagma", "Neuritis óptica", "Oclusión arterial retiniana", "Patología de párpados (Chalazión, orzuelo)", "Pteregión / pingüecula", "Queratitis herpética", "Queratocono", "Retinopatía diabética", "Retinopatía hipertensiva", "Tracoma", "Trauma ocular (Ojo rojo)", "Uveítis"], "ORL": ["Abscesos profundos de cuello (Angina de ludwing)", "Avulsión traumática de dientes", "Barotrauma (perforación timpánica)", "Cáncer bucal", "Cerumen Impactado", "Enfermedad de Ménière", "Epistaxis", "Faringoamigdalitis (Amigdelectomía)", "Fracturas nasales", "HNSI (Hipoacusia neruosensoríal)", "Infecciones odontogénicas (Caries)", "Mastoiditis aguda", "Mucormicosis", "Neuritis vestibular", "Otitis externa aguda", "Otitis media aguda", "Otosclerosis", "Papilomatosis laríngea juvenil", "Parálisis de Bell (Síndrome de Ramsay-Hunt)", "Pólipos nasales", "Presbiacusia", "Resfríado / Catarro", "Rinitis alérgica", "Sinusitis", "Vértigo posicional paroxístico benigno"], "TyO": ["Codo de niñera", "Embolia grasa", "Enfermedad de Legg–Calvé–Perthes", "Epifisiolistesis femoral", "Escoliosis (NUEVO)", "Esguince cervical", "Esguince de tobillo", "Fractura de antebrazo", "Fractura de cadera", "Fractura de clavícula", "Fractura de tibia", "Fracturas de húmero", "Fracturas de radio distal", "Fracturas de tobillo", "Fracturas expuestas", "Lesiones de rodilla", "Lesiones del codo (Fracturas y luxaciones de codo)", "Lesiones fisarias (Salter Harris)", "Lesiones traumáticas en mano", "Luxación de cadera (coxofemoral)", "Luxación de hombro (glenohumeral)", "Osteoartrosis", "Osteomielitis", "Pie equino varo", "Pie plano", "Ruptura del tendón de aquiles", "Síndrome de hombro doloroso (Lesion acriomioclavicular)", "Síndrome de salida torácica (Costilla cervical) (Síndrome de Paget-Schroetter)", "Síndrome del túnel del carpo", "Tumores óseos (Osteosarcoma, Ewing)"], "Urgencias quirurgicas": ["Choques (tipos de shock - hipovolémico - Neurogénico)", "Gran quemado (niño / adultos)", "Hipotérmia (lesión por exposición al frio)", "Manejo de politraumatizado", "Quemaduras", "Taponamiento cardíaco (Contusion cardiaca)", "TCE en adultos (Fractura de cráneo)", "TCE en pediátricos", "Trauma abdominal (Trauma renal)", "Trauma de pelvis", "Trauma espinal y médula", "Trauma esplénico (esplenectomía)", "Trauma obstétrico", "Trauma tóracico (Hemotorax, neumotórax, ruptura diafragma, esofágica, tórax inestable y lesión del árbol traqueobronqueal)."], "Urología": ["Cáncer de próstata", "Cáncer de testículo", "Cáncer de vejiga", "Cáncer renal", "Disfunción eréctil", "Estenosis del meato urinario", "Hidrocele", "Hiperplasia benigna de próstata", "Incontinencia urinaria", "Pielonefritis aguda", "Prostatitis aguda", "Retención aguda de orina", "Síndrome de escroto agudo", "Torsión testicular", "Urolitiasis", "Varicocele"]}, "Pediatría": {"Cirugia pediátrica": ["Atresia biliar"], "Cirugía pediátrica": ["Atresia de coanas", "Atresia duodenal (Atresia yeyunoileal)", "Atresia esofágica", "Circuncisión", "Criptorquidia", "Divertículo de Meckel", "Enfermedad de Hirschsprung", "Espina bífida", "Estenosis hipertrófica de píloro (atresia pilorica)", "Hernia diafragmática congénita", "Invaginación intestinal", "Malformaciones rectales", "Malrotación intestinal", "Patología umbilical (onfalocele y gastrosquisis)", "Retinoblastoma", "Tumores abdominales (Nefroblastoma y neuroblástoma)"], "Crecimiento y desarollo": ["Alimentación complementaria", "Deficiencia de vitamina A", "Desnutrición", "Hipovitaminosis", "Hitos del desarrollo (Etapas del crecimiento)", "Intolerancia a la lactosa", "Lactancia materna", "Obesidad en escolares (obesidad infantil)", "Pelagra", "Raquitismo (deficiencia de vitamina D)", "Síndrome metabólico en niños", "Talla baja", "Vacunas (generalidades aplicacion)", "Vacunas en el embarazo", "Vacunas para adolescentes (Hepatitis B, tetánica, influenza, SR, VPH y COVID 19)", "Vacunas para adulto (Vacuna personal de salud) (SR, tetánica, tdpa, Influenza y COVID 19).", "Vacunas para niños - Esquema nacional (BCG, Hepatitis B, Hexavalente, Rotavirus, neumocócica, influenza, SRP, DPT, Salmonella, y COVID 19)", "Vacunas para personas mayores (Neumocócica, influenza, tetánica y COVID - 19)"], "Genética": ["Alcaptonuria", "Aneuploidías (Síndrome de Klinefelter, Edwards y Patau)", "Displasias óseas (Acondroplasia y Osteogénesis imperfecta).", "Enfermedad de Pompe", "Enfermedad Von Hippel–Lindau", "Esclerosis tuberosa", "Fenilcetonuria", "Fibrosis quística", "Galactosemia", "Homocistinuria", "Mucopolisacaridosis", "Neurofibromatosis", "Poliposis adenomatosa familiar", "Síndrome de down", "Síndrome de Marfan", "Síndrome de Peutz-Jeghers", "Síndrome de Turner", "Síndromes por microdeleción e impronta (Cri du Chatm, williams, prader, Angelman y Beckwith)."], "Infectología Pediátrica": ["Adenovirus", "Ascariasis", "Bronquiolitis", "Cólera", "Coxsackie (mano-pie-boca)", "Crisis febriles", "Diarrea aguda en niños", "Enfermedad de Kawasaki", "Epiglotitis", "Eritema infeccioso", "Escarlatina", "Exantema súbito (roséola)", "Fiebre de origen desconocido", "IVU en pediatría", "Laringotraqueítis", "Mononucleosis infecciosa", "NAC en niños", "Onfalitis", "Oxiuriasis", "Parotiditis", "Pediculosis capitis", "Poliomielitis", "Rubéola", "Sarampión (exantemáticas en general)", "Síndrome de Ritter (piel escaldada)", "STORCH (Sífilis congénita, toxoplasmosis congénita, varicela congénita, rubéola congénita, citomegalovirus congénito y herpes congénito)", "Teniasis", "Tos ferina", "Tricuriasis o tricocefalosis", "Triquinosis", "Varicela"], "Neonatología": ["Apnea del prematuro", "Asfixia neonatal", "Conjuntivitis neonatal", "Displasia broncopulmonar", "Displasia congénita de cadera", "Enfermedad hemorrágica del RN", "Enterocolitis necrotizante", "Glaucoma congénito", "Hemangioma en recién nacido", "Hipoacusia neonatal", "Hipoglucemia neonatal transitoria", "Ictericia neonatal", "Lesión de plexo braquial obstétrico", "Lesiones extracraneales", "Policitemia neonatal", "Prematuro sano (Maduración pulmonar)", "Reanimación neonatal", "Recién nacido término", "Retinopatía del prematuro", "Sepsis neonatal", "Síndrome de aspiración meconio", "Síndrome de dificultad respiratoria", "Síndrome de muerte súbita", "Sistemas de puntuación neonatal (Apgar / Silverman)", "Tamiz neonatal", "Taquipnea transitoria del RN"], "Pediatría general": ["Alergia alimentaria en niños", "Anemia ferropénica en niños", "Aspiración de cuerpo extraño", "Autismo", "Cardiopatías congénitas", "Ciberadicción", "Coartación de la aorta", "Control de niño sano", "Dermatitis del pañal", "Estreñimiento funcional", "Hiperplasia suprarrenal congénita", "Hipotiroidismo congénito", "Maltrato infantil", "Persistencia de conducto arterioso", "RCP pediatría", "Reflujo gastroesofágico del lactante", "Tetralogía de Fallot", "Tortícolis", "Trastornos de diferenciación sexual (Síndrome de Kallman)", "Trastornos de la pubertad (Pubertad precoz y pubertad tardía)"]}, "GyO": {"Ginecología general": ["Adenomiosis", "Amenorreas (primaria / secundaria)", "Anticonceptivos (generalidades)", "Anticonceptivos de barrera", "Anticonceptivos de emergencia", "Anticonceptivos hormonales (implante)", "Anticonceptivos intrauterinos", "Anticonceptivos permanentes (Vasectomía)", "Bartolinitis", "Cáncer cervicouterino", "Cáncer de endometrio", "Cáncer de mama", "Cáncer de ovario", "Cáncer de vagina", "Ciclo menstrual", "Dismenorrea", "Endometriosis", "Enfermedad pélvica inflamatoria (Hidrosalpingitis, Síndrome de Fitz-Hugh-Curtis)", "Hemorragia uterina anormal (Hiperplasia endometrial)", "Infertilidad", "Insuficiencia ovárica primaria", "Malformaciónes mullerianas uterinas", "Menopausia", "Miomatosis uterina", "Patología mamaria beninga (Fibroadenoma, mastopatía fibroquística, mastitis, papiloma intraducta y quiste mamario).", "Prolapso de órganos pélvicos", "Síndrome de ovario poliquístico", "Torsión ovárica", "Tumores anexiales de ovario (Quiste de ovario)", "Vaginitis por Cándida", "Vaginitis por tricomonas", "Vaginosis bacteriana (infecciosa / chlamydia)", "Violencia de género contra la mujer"], "Obstetricia general": ["Aloinmunización materna", "Atención del parto (Manejo activo del parto)", "Cesárea", "Control prenatal", "Depresión postparto", "Desgarro perineal / episiotomia", "Endometritis puerperal", "Estática fetal / pelvimetría", "Fisiología del embarazo", "IVU en el embarazo", "Líquido amniótico", "Parto pretérmino", "Pruebas de bienestar fetal", "Puerperio", "Ruptura prematura de membranas", "VIH Binomio madre-hijo", "Violencia obstétrica"], "Riesgo obstetrico": ["Abortos", "Acretismo placentario", "Amenaza de aborto", "Corioamnionitis", "COVID-19 en el embarazo", "Diabetes gestacional", "Embarazo múltiple", "Enfermedad trofoblástica gestacional", "Hipertensión gestacional", "Incompetencia cervical", "Inversión uterina", "Muerte fetal", "Placenta previa", "Restricción del crecimiento intrauterino", "Sepsis puerperal", "Vasa previa"], "Riesgo obstétrico": ["Distocias", "DPPNI", "Embarazo ectópico", "Emergencia obstétrica (Embolia de líquido amniótico, IAM en embarazo, prolapso de cordón)", "Hemorragia postparto (Atonía uterina)", "Hemorragias obstétricas (generalidades / choque)", "Hiperémesis gravídica", "Preeclampsia (Síndrome de HELLP)", "Ruptura uterina"]}};
+const TEMA_TYPES=[0,1,2];
+function isExam(nm){return /^examen\b/i.test((nm||'').trim());}
+function isActivity(i){return i.ti>=3;}
+function platIcon(url,es){
+  return '';
+}
+/* Normalize: map dirty R.A values → canonical area */
+const _norm=s=>(s||'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const _areaMap={};CAREAS.forEach(c=>{_areaMap[_norm(c)]=c;});
+/* Extra aliases for dirty data */
+[['urgencias','Urgencias médicas'],['riesgo obstetrico','Riesgo obstétrico'],['ginecologia','Ginecología general'],['pediatria general','Pediatría general'],['pediatria','Pediatría general'],['obstetricia','Obstetricia general'],['oftamologia','Oftalmología'],['urgencias quirurgicas','Urgencias quirurgicas'],['traumatologia','TyO']].forEach(([k,v])=>{_areaMap[k]=v;});
+function canonArea(idx){const raw=R.A[idx]||'';return _areaMap[_norm(raw)]||raw;}
+function canonTronco(idx){const raw=R.T[idx]||'';const n=_norm(raw);for(const ct of CTRONCOS){if(_norm(ct)===n)return ct;}return raw;}
+let cK='completo',cW=1,cP=0,items=[],orig=[],meta=null,drag=null,editIt=null,sortByType=true;
+
+function sk(){return 'ea10_'+cK;}
+function dec(k){
+  const c=R.C[k];if(!c)return[];
+  return c.data.map(r=>({id:r[0],s:r[1],d:r[2],tr:r[3],ar:r[4],ti:r[5],nm:R.N[r[6]]||'Tema '+r[6],pr:r[7],url:R.U[r[8]]||'',es:r[9],done:false,nota:''}));
+}
+function dataVer(k){return 'v2_'+R.C[k].data.length+'_'+R.C[k].total;}
+function load(k){
+  cK=k;meta=R.C[k];
+  const d=dec(k);orig=JSON.parse(JSON.stringify(d));items=d;
+  const vk='ea10_ver_'+k,cv=dataVer(k);
+  const oldVer=localStorage.getItem(vk);
+  if(oldVer!==cv){localStorage.removeItem(sk());localStorage.setItem(vk,cv);console.log('Data updated, localStorage cleared for',k);}
+  const s=localStorage.getItem(sk());
+  if(s){try{
+    const sv=JSON.parse(s),m={};sv.forEach(x=>m[x.id]=x);
+    items.forEach(i=>{if(m[i.id]){i.s=m[i.id].s;i.d=m[i.id].d;i.done=!!m[i.id].done;if(m[i.id].nm)i.nm=m[i.id].nm;if(m[i.id].url!==undefined)i.url=m[i.id].url;if(m[i.id].es!==undefined)i.es=m[i.id].es;if(m[i.id].pr!==undefined)i.pr=m[i.id].pr;if(m[i.id].nota)i.nota=m[i.id].nota;if(m[i.id].ord!=null)i.ord=m[i.id].ord;}});
+    sv.filter(x=>x.isNew&&!items.find(i=>i.id===x.id)).forEach(x=>items.push({...x}));
+  }catch(e){}}
+  cW=1;cP=0;buildUI();
+}
+function save(){
+  const st=items.map(i=>({id:i.id,s:i.s,d:i.d,done:!!i.done,nm:i.nm,url:i.url||'',es:i.es,pr:i.pr,ti:i.ti,ar:i.ar,tr:i.tr,nota:i.nota||'',isNew:!!i.isNew,ord:i.ord!=null?i.ord:0}));
+  localStorage.setItem(sk(),JSON.stringify(st));
+  // Guardar progreso a Sheets (async, no bloquea)
+  if(typeof google!=='undefined'&&google.script){
+    const prog=st.filter(i=>i.done||i.nota||i.ord).map(i=>[i.id,i.done?1:0,i.nota||'',i.ord||0,i.s,i.d,new Date().toISOString()]);
+    google.script.run.saveUserProgress(cK,prog);
+  }
+}
+function gP(w){if(!meta)return 0;let c=0;for(let i=0;i<meta.fases.length;i++){c+=meta.fases[i].semanas;if(w<=c)return i;}return meta.fases.length-1;}
+function buildUI(){buildCalTabs();buildPTabs();buildSb();popFilters();popPanel();upCD();updSortBtn();render();}
+
+function buildCalTabs(){
+  let h='';
+  for(const[k,c]of Object.entries(R.C)){
+    const on=k===cK;
+    h+=`<button class="px-2.5 py-1 rounded text-[10px] font-semibold transition-all ${on?'bg-white shadow-sm text-blue-600 font-bold':'text-slate-500 hover:text-slate-700'}" onclick="load('${k}')">${c.nombre_corto}</button>`;
+  }
+  document.getElementById('calTabs').innerHTML=h;
+}
+function buildPTabs(){
+  if(!meta)return;let h='';
+  meta.fases.forEach((f,i)=>{
+    const on=i===cP;
+    h+=`<button class="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1 whitespace-nowrap transition-all ${on?'bg-slate-100 text-slate-700 shadow-sm':'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}" onclick="goP(${i})"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:${f.color}"></span>${f.nombre}</button>`;
+  });
+  document.getElementById('pTabs').innerHTML=h;
+  document.documentElement.style.setProperty('--pc',meta.fases[cP].color);
+}
+function goP(i){cP=i;let c=0;for(let j=0;j<i;j++)c+=meta.fases[j].semanas;cW=c+1;buildPTabs();buildSb();render();}
+
+function buildSb(){
+  const nav=document.getElementById('sbNav');if(!meta)return;
+  if(!window.sbOpen)window.sbOpen={};
+  let h='',c=0;
+  meta.fases.forEach((f,fi)=>{
+    // Auto-open the phase that contains the current week
+    const fStart=c+1,fEnd=c+f.semanas;
+    const hasCW=cW>=fStart&&cW<=fEnd;
+    if(hasCW)window.sbOpen[fi]=true;
+    const isOpen=window.sbOpen[fi]||false;
+    // Phase totals
+    const fItems=items.filter(i=>i.s>=fStart&&i.s<=fEnd);
+    const fDone=fItems.filter(i=>i.done).length;
+    const fTotal=fItems.length;
+    const fPct=fTotal>0?Math.round(fDone/fTotal*100):0;
+    const arrow=isOpen?'\u25BC':'\u25B6';
+    h+=`<div class="flex items-center gap-2 px-2 py-2 mt-1 rounded-md cursor-pointer hover:bg-slate-50 transition-all select-none" onclick="toggleSbPhase(${fi})">
+      <span class="text-[8px] text-slate-400 w-3">${arrow}</span>
+      <span class="w-2 h-2 rounded-full shrink-0" style="background:${f.color}"></span>
+      <span class="text-[10px] font-bold text-slate-600 flex-1 truncate">${f.nombre}</span>
+      <span class="text-[8px] font-bold text-slate-400">${fPct}%</span>
+      <span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">${fTotal}</span>
+    </div>`;
+    if(isOpen){
+      for(let w=c+1;w<=c+f.semanas;w++){
+        const wm=meta.weeks?meta.weeks[w-1]:null;
+        const cnt=items.filter(i=>i.s===w).length;
+        const dn=items.filter(i=>i.s===w&&i.done).length;
+        const on=w===cW;
+        const bg=on?`background:${f.color};color:#fff`:'background:#f1f5f9;color:#64748b';
+        h+=`<div class="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all mb-0.5 ml-3 ${on?'bg-blue-50 shadow-sm':'hover:bg-slate-50'}" onclick="setW(${w})">
+          <div class="w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold shrink-0" style="${bg}">${w}</div>
+          <div class="flex-1 min-w-0"><div class="text-[11px] font-semibold leading-tight ${on?'text-blue-700':'text-slate-600'}">Sem ${w}</div>${wm?`<div class="text-[8px] text-slate-400 truncate">${wm.start}-${wm.end}</div>`:''}</div>
+          ${dn===cnt&&cnt>0?'<span class="text-emerald-500 text-[10px]">\u2713</span>':''}
+          <div class="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">${cnt}</div>
+        </div>`;
+      }
+    }
+    c+=f.semanas;
+  });
+  nav.innerHTML=h;
+  const tot=items.length,dn=items.filter(i=>i.done).length;
+  document.getElementById('sTotal').textContent=tot;
+  document.getElementById('sDone').textContent=dn;
+  document.getElementById('sPend').textContent=tot-dn;
+  document.getElementById('sWeek').textContent=items.filter(i=>i.s===cW).length;
+  const pct=tot>0?Math.round(dn/tot*100):0;
+  document.getElementById('pPct').textContent=pct+'%';
+  document.getElementById('pFill').style.width=pct+'%';
+  document.getElementById('pNum').textContent=dn+'/'+tot;
+}
+function setW(w){cW=w;cP=gP(w);buildPTabs();buildSb();render();}
+function toggleSbPhase(fi){if(!window.sbOpen)window.sbOpen={};window.sbOpen[fi]=!window.sbOpen[fi];buildSb();}
+function upCD(){const d=Math.ceil((ENARM-new Date())/864e5);document.getElementById('cdEl').textContent=d>0?d+' d\u00edas':'\u00a1\u00c9xito!';}
+
+function popFilters(){
+  /* Use canonical 30 areas and 4 troncos */
+  const bOpt=(arr,p)=>`<option value="">${p}</option>`+arr.map((x,i)=>`<option value="${i}">${x}</option>`).join('');
+  document.getElementById('fTr').innerHTML=`<option value="">Tronco</option>`+CTRONCOS.map(t=>`<option>${t}</option>`).join('');
+  document.getElementById('fAr').innerHTML=`<option value="">\u00c1rea</option>`+CAREAS.map(a=>`<option value="${a}">${a}</option>`).join('');
+  document.getElementById('fTi').innerHTML=bOpt(TN,'Tipo');
+  document.getElementById('fPr').innerHTML=bOpt(PR,'Prio');
+  document.getElementById('fEs').innerHTML=bOpt(ES,'Estado');
+  document.getElementById('eTi').innerHTML=TN.map((t,i)=>`<option value="${i}">${TE[i]} ${t}</option>`).join('');
+  document.getElementById('eEs').innerHTML=ES.map((e,i)=>`<option value="${i}">${EI[i]} ${e}</option>`).join('');
+  document.getElementById('ePr').innerHTML=PR.map((p,i)=>`<option value="${i}">${p}</option>`).join('');
+}
+function gF(){return{tr:document.getElementById('fTr').value,ar:document.getElementById('fAr').value,ti:document.getElementById('fTi').value,pr:document.getElementById('fPr').value,es:document.getElementById('fEs').value,q:document.getElementById('fQ').value.toLowerCase()};}
+function fil(f){return items.filter(i=>{if(f.tr&&canonTronco(i.tr)!==f.tr)return false;if(f.ar&&canonArea(i.ar)!==f.ar)return false;if(f.ti!==''&&i.ti!=f.ti)return false;if(f.pr!==''&&i.pr!=f.pr)return false;if(f.es!==''&&i.es!=f.es)return false;if(f.q&&!i.nm.toLowerCase().includes(f.q))return false;return true;});}
+function clearFilters(){['fTr','fAr','fTi','fPr','fEs','fQ'].forEach(id=>document.getElementById(id).value='');render();upFilterCount();document.getElementById('filterPop').classList.add('hidden');}
+
+function updSortBtn(){const b=document.getElementById('btnSortType');if(sortByType){b.className='text-[9px] font-bold px-2 py-1 rounded-md border border-blue-400 bg-blue-50 text-blue-600 transition-all shrink-0';b.textContent='Ev primero \u2713';}else{b.className='text-[9px] font-bold px-2 py-1 rounded-md border border-slate-200 bg-slate-50 text-slate-400 transition-all shrink-0';b.textContent='Orden libre';}}
+
+/* ===== FIX COLUMN HEIGHTS — pure JS, ignores all CSS ===== */
+function fixColHeights(){
+  const h=window.innerHeight-44-50;/* viewport - topbar - headers/padding */
+  document.querySelectorAll('.dcol').forEach(dc=>{
+    dc.style.maxHeight=h+'px';
+    dc.style.overflowY='auto';
+  });
+}
+window.addEventListener('resize',fixColHeights);
+
+/* ===== RENDER KANBAN ===== */
+function render(){
+  const f=gF(),all=fil(f),wk=all.filter(i=>i.s===cW),el=document.getElementById('cont');
+  let h='<div class="board-row">';
+  for(let d=0;d<7;d++){
+    const di=wk.filter(i=>i.d===d).sort((a,b)=>sortByType?(a.ti-b.ti||(a.ord||999)-(b.ord||999)||a.pr-b.pr||a.id-b.id):((a.ord||999)-(b.ord||999)||a.pr-b.pr||a.id-b.id));
+    const isW=d>=5;
+    h+=`<div class="day-col">
+      <div class="day-hdr flex items-center justify-between mb-1.5 px-0.5">
+        <span class="text-[10px] font-bold text-slate-700 uppercase tracking-wider ${isW?'opacity-40':''}">${DI[d]}</span>
+        <span class="text-[9px] font-bold text-slate-400 bg-slate-200/50 px-1.5 py-0.5 rounded">${di.length}</span>
+      </div>
+      <div class="dcol p-1.5 ${isW?'border border-dashed border-slate-200':'bg-white/50'}" data-s="${cW}" data-d="${d}">
+        ${di.map(i=>mkC(i)).join('')}
+        <button class="w-full py-1.5 mt-1 border border-dashed border-slate-300 rounded-md text-[10px] font-bold text-slate-400 hover:text-blue-500 hover:border-blue-400 hover:bg-white transition-all flex items-center justify-center gap-1" onclick="newC(${cW},${d})">+ Agregar</button>
+      </div>
+    </div>`;
+  }
+  h+='</div>';el.innerHTML=h;
+  /* Force column heights with JS — bulletproof scroll */
+  fixColHeights();
+  attachDD(el);
+  document.getElementById('csG').textContent='\u2705'+wk.filter(i=>i.done).length;
+  document.getElementById('csY').textContent='\ud83d\udfe1'+wk.filter(i=>!i.done&&i.es!==3).length;
+  document.getElementById('csX').textContent='\u2b1c'+wk.filter(i=>i.es===3).length;
+}
+
+/* ===== CARD — clean white, type color in text, priority dot ===== */
+const TC=['#3b82f6','#10b981','#8b5cf6','#d97706','#0891b2','#ca8a04','#dc2626','#db2777'];
+function mkC(i){
+  const lnk=i.url&&i.url.startsWith('http');
+  const dc=i.done?'done':'';
+  const an=R.A[i.ar]||'';
+  const tc=TC[i.ti]||'#64748b';
+  const actCls=i.ti>=3?(i.ti===3?' act-caso':i.ti===4?' act-inter':i.ti===5?' act-repaso':i.ti===6?' exam-card':' act-sim'):'';
+  return `<div class="card ${dc}${actCls}" draggable="true" data-id="${i.id}" ondblclick="openMo(${i.id})">
+    <div class="flex items-center gap-1.5 mb-1">
+      <div class="ck ${i.done?'on':''}" onclick="event.stopPropagation();togDone(${i.id})">\u2713</div>
+      <div class="pdot pr${i.pr}" title="${PR[i.pr]}"></div>
+      <span class="text-[8px] font-bold uppercase tracking-wider flex-1 truncate" style="color:${tc}">${TE[i.ti]} ${TN[i.ti]}</span>
+      <div class="ca flex gap-0.5">
+        <button class="w-5 h-5 rounded text-[10px] text-slate-400 hover:text-blue-500 hover:bg-blue-50 flex items-center justify-center" onclick="event.stopPropagation();moveUp(${i.id})" title="Subir">\u25B2</button>
+        <button class="w-5 h-5 rounded text-[10px] text-slate-400 hover:text-blue-500 hover:bg-blue-50 flex items-center justify-center" onclick="event.stopPropagation();moveDown(${i.id})" title="Bajar">\u25BC</button>
+        <button class="w-5 h-5 rounded text-[10px] text-slate-400 hover:text-blue-500 hover:bg-blue-50 flex items-center justify-center" onclick="event.stopPropagation();openMo(${i.id})" title="Editar">\u270e</button>
+        <button class="w-5 h-5 rounded text-[10px] text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center" onclick="event.stopPropagation();delC(${i.id})" title="Eliminar">\u2716</button>
+      </div>
+    </div>
+    <div class="c-nm text-[11px] font-semibold text-slate-700 leading-snug" title="${i.nm.replace(/"/g,'&quot;')}">
+      ${lnk?`<a href="${i.url}" target="_blank" onclick="event.stopPropagation()" class="hover:text-blue-600">${i.nm}</a>`:i.nm}
+    </div>
+  </div>`;
+}
+
+
+/* ===== REORDER CARDS ===== */
+function ensureOrd(s,d){
+  const dayItems=items.filter(i=>i.s===s&&i.d===d).sort((a,b)=>{
+    const oa=typeof a.ord==='number'?a.ord:999;
+    const ob=typeof b.ord==='number'?b.ord:999;
+    return sortByType?(a.ti-b.ti||oa-ob||a.pr-b.pr||a.id-b.id):(oa-ob||a.pr-b.pr||a.id-b.id);
+  });
+  dayItems.forEach((it,idx)=>{it.ord=idx;});
+}
+function moveUp(id){
+  id=Number(id);
+  const it=items.find(i=>i.id===id);if(!it)return;
+  ensureOrd(it.s,it.d);
+  const dayItems=items.filter(i=>i.s===it.s&&i.d===it.d).sort((a,b)=>a.ord-b.ord);
+  const idx=dayItems.findIndex(i=>i.id===id);
+  if(idx<=0){toast('Ya est\u00e1 arriba');return;}
+  const prev=dayItems[idx-1];
+  const tmp=it.ord;it.ord=prev.ord;prev.ord=tmp;
+  save();render();
+  toast('Movido \u25B2');
+}
+function moveDown(id){
+  id=Number(id);
+  const it=items.find(i=>i.id===id);if(!it)return;
+  ensureOrd(it.s,it.d);
+  const dayItems=items.filter(i=>i.s===it.s&&i.d===it.d).sort((a,b)=>a.ord-b.ord);
+  const idx=dayItems.findIndex(i=>i.id===id);
+  if(idx>=dayItems.length-1){toast('Ya est\u00e1 abajo');return;}
+  const next=dayItems[idx+1];
+  const tmp=it.ord;it.ord=next.ord;next.ord=tmp;
+  save();render();
+  toast('Movido \u25BC');
+}
+
+/* ===== DRAG & DROP ===== */
+function attachDD(el){
+  el.querySelectorAll('.card').forEach(c=>{
+    const cid=parseInt(c.dataset.id);
+    c.addEventListener('dragstart',e=>{hidePV();drag=items.find(i=>i.id==c.dataset.id);setTimeout(()=>c.classList.add('dragging'),0);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','card');});
+    c.addEventListener('dragend',()=>{c.classList.remove('dragging');drag=null;document.querySelectorAll('.over').forEach(x=>x.classList.remove('over'));});
+    c.addEventListener('mouseenter',e=>showPV(e,cid));
+    c.addEventListener('mouseleave',hidePV);
+  });
+  el.querySelectorAll('.dcol').forEach(col=>{
+    col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('over');});
+    col.addEventListener('dragleave',()=>col.classList.remove('over'));
+    col.addEventListener('drop',e=>{
+      e.preventDefault();col.classList.remove('over');
+      const dt=e.dataTransfer.getData('text/plain');
+      if(dt==='panel'){
+        const nm=e.dataTransfer.getData('t-nm'),tr=parseInt(e.dataTransfer.getData('t-tr'))||0,ar=parseInt(e.dataTransfer.getData('t-ar'))||0,pr=parseInt(e.dataTransfer.getData('t-pr'))||2,url=e.dataTransfer.getData('t-url')||'',ti=parseInt(e.dataTransfer.getData('t-ti'))||0;
+        const nid=items.length>0?Math.max(...items.map(i=>i.id))+1:1;
+        items.push({id:nid,s:parseInt(col.dataset.s),d:parseInt(col.dataset.d),tr,ar,ti,nm,pr,url,es:url?0:3,nota:'',done:false,isNew:true});
+        save();buildSb();render();renderPanel();toast('Agregado: '+nm.substring(0,25));return;
+      }
+      if(!drag)return;drag.s=parseInt(col.dataset.s);drag.d=parseInt(col.dataset.d);drag=null;save();render();toast('Movida');
+    });
+  });
+}
+
+/* ===== HOVER PREVIEW ===== */
+let pvTimer=null;
+const pvEl=()=>document.getElementById('preview');
+function showPV(e,id){
+  clearTimeout(pvTimer);
+  pvTimer=setTimeout(()=>{
+    const i=items.find(x=>x.id===id);if(!i)return;
+    const p=pvEl();
+    const tc=TC[i.ti]||'#64748b';
+    const urlHtml=i.url?`<div class="pv-url">${i.url}</div>`:'';
+    p.innerHTML=`
+      <div class="pv-type" style="color:${tc}">${TE[i.ti]} ${TN[i.ti]}</div>
+      <div class="pv-name">${i.nm}</div>
+      <div class="pv-divider"></div>
+      <div class="pv-row"><span class="pv-label">Tronco</span><span class="pv-val">${R.T[i.tr]||'-'}</span></div>
+      <div class="pv-row"><span class="pv-label">\u00c1rea</span><span class="pv-val">${R.A[i.ar]||'-'}</span></div>
+      <div class="pv-row"><span class="pv-label">Prioridad</span><span class="pv-val"><span class="pdot pr${i.pr} inline-block" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>${PR[i.pr]}</span></div>
+      <div class="pv-row"><span class="pv-label">Estado</span><span class="pv-val">${ES[i.es]||'-'}</span></div>
+      ${urlHtml}
+      ${i.nota?`<div class="pv-divider"></div><div style="font-size:10px;color:#64748b;font-style:italic">${i.nota}</div>`:''}
+    `;
+    // Position: near cursor but clamped to viewport
+    const rect=e.target.closest('.card').getBoundingClientRect();
+    let x=rect.right+8,y=rect.top;
+    if(x+330>window.innerWidth)x=rect.left-328;
+    if(y+200>window.innerHeight)y=window.innerHeight-220;
+    if(y<8)y=8;
+    p.style.left=x+'px';p.style.top=y+'px';
+    p.classList.add('show');
+  },400);
+}
+function hidePV(){clearTimeout(pvTimer);pvEl().classList.remove('show');}
+
+/* ===== ACTIONS ===== */
+function togDone(id){const i=items.find(x=>x.id===id);if(i){i.done=!i.done;save();buildSb();render();}}
+function delC(id){if(!confirm('\u00bfEliminar?'))return;items=items.filter(i=>i.id!==id);save();buildSb();render();renderPanel();toast('Eliminada');}
+function returnToPanel(id){const i=items.find(x=>x.id===id);if(!i)return;items=items.filter(x=>x.id!==id);save();buildSb();render();renderPanel();toast('Devuelto');}
+function newC(s,d){const nid=items.length>0?Math.max(...items.map(i=>i.id))+1:1;items.push({id:nid,s,d,tr:0,ar:0,ti:0,nm:'Nueva Actividad',pr:2,url:'',es:3,nota:'',done:false,isNew:true});save();openMo(nid);render();}
+
+/* ===== MODAL ===== */
+function openMo(id){
+  editIt=items.find(i=>i.id===id);if(!editIt)return;
+  const mo=document.getElementById('editMo');mo.classList.remove('hidden');mo.classList.add('flex');
+  document.getElementById('moTitle').textContent=editIt.nm;
+  document.getElementById('eNom').value=editIt.nm||'';document.getElementById('eUrl').value=editIt.url||'';
+  document.getElementById('eTi').value=editIt.ti;document.getElementById('eEs').value=editIt.es;
+  document.getElementById('ePr').value=editIt.pr;document.getElementById('eNota').value=editIt.nota||'';
+}
+function closeMo(){document.getElementById('editMo').classList.add('hidden');document.getElementById('editMo').classList.remove('flex');editIt=null;}
+function saveMo(){
+  if(!editIt)return;editIt.nm=document.getElementById('eNom').value;editIt.url=document.getElementById('eUrl').value;
+  editIt.ti=parseInt(document.getElementById('eTi').value);editIt.es=parseInt(document.getElementById('eEs').value);
+  editIt.pr=parseInt(document.getElementById('ePr').value);editIt.nota=document.getElementById('eNota').value;
+  save();closeMo();render();renderPanel();toast('Guardado');
+}
+function delCard(){if(editIt&&confirm('\u00bfBorrar?')){items=items.filter(i=>i.id!==editIt.id);save();closeMo();buildSb();render();renderPanel();toast('Borrado');}}
+
+/* ===== SIDEBAR ===== */
+let sidebarOpen=true;
+function toggleSidebar(){
+  sidebarOpen=!sidebarOpen;
+  document.getElementById('app').classList.toggle('sb-collapsed',!sidebarOpen);
+  const btn=document.getElementById('sbToggle');
+  if(btn){btn.textContent=sidebarOpen?'\u2630':'\u2630';btn.classList.toggle('bg-blue-50',!sidebarOpen);btn.classList.toggle('text-blue-600',!sidebarOpen);}
+}
+
+/* ===== FILTERS ===== */
+function toggleFilters(){
+  const pop=document.getElementById('filterPop');
+  pop.classList.toggle('hidden');
+}
+function upFilterCount(){
+  const vals=['fTr','fAr','fTi','fPr','fEs'].map(id=>document.getElementById(id).value).filter(v=>v!=='');
+  const el=document.getElementById('filterCount');
+  if(vals.length>0){el.textContent=vals.length;el.classList.remove('hidden');el.classList.add('flex');}
+  else{el.classList.add('hidden');el.classList.remove('flex');}
+}
+document.addEventListener('click',function(e){
+  const fw=document.getElementById('filterWrap');
+  if(fw&&!fw.contains(e.target)){document.getElementById('filterPop').classList.add('hidden');}
+});
+
+/* ===== PANEL ===== */
+let panelOpen=false;
+function togglePanel(){
+  panelOpen=!panelOpen;
+  document.getElementById('app').classList.toggle('has-panel',panelOpen);
+  document.getElementById('toggleBtn').style.transform=panelOpen?'':'rotate(180deg)';
+}
+let pF='';
+function popPanel(){
+  const f=document.getElementById('rpFilters');
+  let h=`<select class="w-full text-[11px] font-semibold rounded-md px-2 py-1.5 border border-slate-200 bg-slate-50" onchange="setPF(this.value)">`;
+  h+=`<option value="">Todas las áreas</option>`;
+  CAREAS.forEach(a=>{h+=`<option value="${a}"${pF===a?' selected':''}>${a}</option>`;});
+  h+=`</select>`;
+  f.innerHTML=h;renderPanel();
+}
+function setPF(v){pF=v;renderPanel();}
+function renderPanel(){
+  const q=(document.getElementById('rpQ').value||'').toLowerCase(),list=document.getElementById('rpList');
+  /* Build available from CATALOG: 650 temas × TEMA_TYPES (Evidencias,Flashcards,Resúmenes) */
+  const troncoMap={'Medicina interna':0,'Cirugía':1,'Pediatría':2,'GyO':3};
+  const catTopics=[];
+  for(const[tronco,areas]of Object.entries(CATALOG)){
+    const trIdx=troncoMap[tronco]!=null?troncoMap[tronco]:0;
+    for(const[area,temas]of Object.entries(areas)){
+      let arIdx=R.A.indexOf(area);if(arIdx<0){for(let ai=0;ai<R.A.length;ai++){if(_norm(R.A[ai])===_norm(area)){arIdx=ai;break;}}};if(arIdx<0)arIdx=0;
+      temas.forEach(nm=>{
+        TEMA_TYPES.forEach(ti=>{
+          catTopics.push({key:nm+'|'+ti,nm:nm,tr:trIdx,ar:arIdx,areaName:area,pr:0,url:'',ti:ti});
+        });
+      });
+    }
+  }
+  const seen=new Set();const uniq=catTopics.filter(t=>{if(seen.has(t.key))return false;seen.add(t.key);return true;});
+  /* Check which are already in calendar by normalized name + type */
+  const inC=new Set();items.forEach(i=>{inC.add(i.nm+'|'+i.ti);inC.add(_norm(i.nm)+'|'+i.ti);});
+  let tp=uniq.filter(t=>!inC.has(t.key)&&!inC.has(_norm(t.nm)+'|'+t.ti));
+  if(pF)tp=tp.filter(t=>_norm(t.areaName||'')===_norm(pF));
+  if(q)tp=tp.filter(t=>t.nm.toLowerCase().includes(q));
+  tp.sort((a,b)=>a.pr-b.pr||a.nm.localeCompare(b.nm));
+  let h='';
+  tp.slice(0,200).forEach(t=>{
+    const tc=TC[t.ti]||'#64748b';
+    h+=`<div class="rp-item bg-white rounded-md p-2 border border-slate-100 flex items-center gap-2 mb-1" draggable="true" data-nm="${t.nm.replace(/"/g,'&quot;')}" data-tr="${t.tr}" data-ar="${t.ar}" data-pr="${t.pr}" data-url="${(t.url||'').replace(/"/g,'&quot;')}" data-ti="${t.ti}">
+      <div class="pdot pr${t.pr}"></div>
+      <div class="flex-1 min-w-0">
+        <div class="text-[10px] font-semibold text-slate-700 truncate">${t.nm}</div>
+        <div class="text-[8px] font-bold uppercase tracking-wider mt-0.5"><span style="color:${tc}">${TE[t.ti]} ${TS[t.ti]}</span> <span class="text-slate-400">\u00b7 ${R.A[t.ar]||''}</span></div>
+      </div>
+    </div>`;
+  });
+  if(tp.length===0)h='<div class="py-8 text-center text-[10px] font-semibold text-slate-400">Todo asignado \ud83c\udf89</div>';
+  list.innerHTML=h;
+  document.getElementById('rpCount').textContent=tp.length+' disponibles';
+  list.querySelectorAll('.rp-item').forEach(el=>{
+    el.addEventListener('dragstart',e=>{
+      e.dataTransfer.setData('text/plain','panel');
+      e.dataTransfer.setData('t-nm',el.dataset.nm);e.dataTransfer.setData('t-tr',el.dataset.tr);
+      e.dataTransfer.setData('t-ar',el.dataset.ar);e.dataTransfer.setData('t-pr',el.dataset.pr);
+      e.dataTransfer.setData('t-url',el.dataset.url||'');e.dataTransfer.setData('t-ti',el.dataset.ti);
+      setTimeout(()=>el.classList.add('dragging'),0);e.dataTransfer.effectAllowed='copy';
+    });
+    el.addEventListener('dragend',()=>el.classList.remove('dragging'));
+  });
+}
+
+/* ===== EXPORT / IMPORT ===== */
+function exportExcel(){
+  const wb=XLSX.utils.book_new();
+  const rows=[['ID','Semana','D\u00eda','Tronco','\u00c1rea','Tipo','Nombre','Prioridad','URL','Estado','Completada','Notas']];
+  items.forEach(i=>rows.push([i.id,i.s,DI[i.d]||'',R.T[i.tr]||'',R.A[i.ar]||'',TN[i.ti]||'',i.nm,PR[i.pr]||'',i.url,ES[i.es]||'',i.done?'S\u00ed':'No',i.nota||'']));
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:5},{wch:8},{wch:6},{wch:16},{wch:16},{wch:14},{wch:35},{wch:10},{wch:35},{wch:12},{wch:6},{wch:25}];
+  XLSX.utils.book_append_sheet(wb,ws,meta.nombre_corto);XLSX.writeFile(wb,`ENARMAD_${cK}.xlsx`);toast('Exportado');
+}
+function exportJSON(){const b=new Blob([JSON.stringify(items,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`enarmad_${cK}.json`;a.click();toast('Guardado');}
+function importJSON(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{items=JSON.parse(ev.target.result);save();buildSb();render();renderPanel();toast('Importado');}catch(err){toast('Error');}};r.readAsText(f);e.target.value='';}
+function resetCal(){if(confirm('\u00bfRestaurar todo?')){localStorage.removeItem(sk());load(cK);toast('Restaurado');}}
+function toast(m){const t=document.getElementById('toast');document.getElementById('toastMsg').textContent=m;t.classList.remove('opacity-0','translate-y-2','pointer-events-none');setTimeout(()=>t.classList.add('opacity-0','translate-y-2','pointer-events-none'),2500);}
+
+
+/* ===== VIEW TOGGLE ===== */
+/* ===== VIEW TOGGLE ===== */
+let curView='cal';
+function setView(v){
+  curView=v;
+  document.getElementById('contWrap').style.display=v==='cal'?'':'none';
+  document.getElementById('idxWrap').style.display=v==='idx'?'':'none';
+  const vc=document.getElementById('vCal'),vi=document.getElementById('vIdx');
+  if(v==='cal'){vc.className='px-2.5 py-1 text-[10px] font-bold rounded transition-all bg-white text-slate-700 shadow-sm';vi.className='px-2.5 py-1 text-[10px] font-bold rounded transition-all text-slate-400';}
+  else{vi.className='px-2.5 py-1 text-[10px] font-bold rounded transition-all bg-white text-slate-700 shadow-sm';vc.className='px-2.5 py-1 text-[10px] font-bold rounded transition-all text-slate-400';}
+  if(v==='idx')renderIdx();
+}
+
+/* ===== INDICE MAESTRO ===== */
+const idxOpen={};
+function renderIdx(){
+  const el=document.getElementById('idxCont');
+  if(!el)return;
+  const q=(document.getElementById('idxQ')||{}).value||'';
+  const ql=q.toLowerCase();
+  const tColor={'Medicina interna':'#3b82f6','Cirug\u00eda':'#ef4444','Pediatr\u00eda':'#10b981','GyO':'#a855f7'};
+
+  const itemsByName={};
+  items.forEach(i=>{if(!itemsByName[i.nm])itemsByName[i.nm]=[];itemsByName[i.nm].push(i);});
+  const origByName={};
+  orig.forEach(a=>{if(!origByName[a.nm])origByName[a.nm]=[];origByName[a.nm].push(a);});
+
+  let h='<div style="max-width:1200px;margin:0 auto">';
+
+  /* Search */
+  h+='<div style="position:relative;margin-bottom:16px"><svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:#94a3b8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><input class="idx-search" id="idxQ" placeholder="Buscar tema, \u00e1rea o tronco..." value="'+q+'" oninput="renderIdx()"></div>';
+
+  /* Summary cards */
+  let grandTotal=0;const trData={};
+  CTRONCOS.forEach(tr=>{if(!CATALOG[tr])return;const areas=Object.keys(CATALOG[tr]).sort();const cnt=areas.reduce((s,ar)=>s+(CATALOG[tr][ar]||[]).length,0);grandTotal+=cnt;trData[tr]={areas:areas.length,temas:cnt};});
+
+  h+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><span style="font-size:20px;font-weight:900;color:#1e293b">'+grandTotal+'</span><span style="font-size:12px;font-weight:600;color:#64748b">temas en cat\u00e1logo</span></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">';
+  CTRONCOS.forEach(tr=>{const d=trData[tr];if(!d)return;const c=tColor[tr]||'#64748b';h+='<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;border-left:3px solid '+c+'"><div style="font-size:12px;font-weight:800;color:#1e293b">'+tr+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+d.areas+' \u00e1reas \u00b7 '+d.temas+' temas</div></div>';});
+  h+='</div>';
+
+  /* Legend */
+  h+='<div style="display:flex;gap:14px;margin-bottom:14px;font-size:10px;font-weight:600;color:#64748b;align-items:center;flex-wrap:wrap"><span>Leyenda:</span><span><span class="idx-dot has" style="vertical-align:middle"></span> En plataforma</span><span><span class="idx-dot pend" style="vertical-align:middle"></span> Pendiente</span><span><span class="idx-dot miss" style="vertical-align:middle"></span> No existe</span></div>';
+
+  /* Type columns: content types 0,1,2 (uses global TEMA_TYPES) */
+  const typeHdrs=TEMA_TYPES.map(i=>'<th style="color:'+TC[i]+';text-align:center;font-size:8px;padding:3px 2px">'+TE[i]+'<br>'+TN[i].substring(0,5)+'</th>').join('');
+
+  CTRONCOS.forEach(tr=>{
+    if(!CATALOG[tr])return;
+    const trKey='t_'+tr;const isOpen=idxOpen[trKey]!==false;
+    const c=tColor[tr]||'#64748b';
+    const trAreas=Object.keys(CATALOG[tr]).sort();
+    const trCount=trAreas.reduce((s,ar)=>s+(CATALOG[tr][ar]||[]).length,0);
+
+    let trVisible=false;
+    if(!ql)trVisible=true;
+    else{trAreas.forEach(ar=>{if(ar.toLowerCase().includes(ql)||tr.toLowerCase().includes(ql))trVisible=true;(CATALOG[tr][ar]||[]).forEach(nm=>{if(nm.toLowerCase().includes(ql))trVisible=true;});});}
+    if(!trVisible)return;
+
+    h+='<div class="idx-tronco"><div class="idx-tronco-hdr" onclick="idxOpen[\''+trKey+'\']=idxOpen[\''+trKey+'\']=== false?true:false;renderIdx();"><span class="arrow">'+(isOpen?'\u25bc':'\u25b6')+'</span><span style="width:8px;height:8px;border-radius:50%;background:'+c+';flex-shrink:0"></span>'+tr+'<span class="cnt">'+trAreas.length+' \u00e1reas \u00b7 '+trCount+' temas</span></div>';
+
+    if(isOpen){
+      trAreas.forEach(ar=>{
+        const temas=CATALOG[tr][ar]||[];
+        const filtered=ql?temas.filter(nm=>nm.toLowerCase().includes(ql)||ar.toLowerCase().includes(ql)||tr.toLowerCase().includes(ql)):temas;
+        if(filtered.length===0)return;
+        const arKey='a_'+tr+'_'+ar;const isArOpen=idxOpen[arKey]!==false;
+
+        h+='<div class="idx-area"><div class="idx-area-hdr" onclick="idxOpen[\''+arKey+'\']=idxOpen[\''+arKey+'\']=== false?true:false;renderIdx();"><span class="arrow">'+(isArOpen?'\u25bc':'\u25b6')+'</span>'+ar+'<span class="cnt">'+filtered.length+'</span></div>';
+
+        if(isArOpen){
+          h+='<table class="idx-table"><thead><tr><th style="width:260px">Tema</th>'+typeHdrs+'<th>Estado</th></tr></thead><tbody>';
+          filtered.forEach(nm=>{
+            const calItems=itemsByName[nm]||[];
+            const origItems=origByName[nm]||[];
+            h+='<tr><td class="idx-tema">'+nm+'</td>';
+
+            for(const ti of TEMA_TYPES){
+              const inCal=calItems.find(i=>i.ti===ti);
+              const inOrig=origItems.find(a=>a.ti===ti);
+              if(inCal){
+                const es=inCal.es||0;
+                const cls=es===0?'has':'pend';
+                const url=inCal.url||'';
+                const link=url?'<a href="'+url+'" target="_blank" style="color:#0ea5e9;font-size:9px;margin-left:2px;text-decoration:none" title="'+url.substring(0,60)+'">\u2197</a>':'';
+                h+='<td style="text-align:center"><span class="idx-dot '+cls+'" title="'+ES[es]+'"></span>'+link+'</td>';
+              } else if(inOrig){
+                const url=inOrig.url||'';
+                const link=url?'<a href="'+url+'" target="_blank" style="color:#0ea5e9;font-size:9px;margin-left:2px;text-decoration:none" title="'+url.substring(0,60)+'">\u2197</a>':'';
+                h+='<td style="text-align:center"><span class="idx-dot miss" title="No asignada"></span>'+link+'</td>';
+              } else {
+                h+='<td style="text-align:center"><span style="color:#e2e8f0;font-size:8px">\u2014</span></td>';
+              }
+            }
+
+            const hasAny=calItems.length>0;
+            const allPlat=calItems.length>0&&calItems.every(i=>i.es===0);
+            const stColor=allPlat?'#10b981':hasAny?'#f59e0b':'#94a3b8';
+            const stTxt=allPlat?'\u2713 Listo':hasAny?'Parcial':'\u2014';
+            h+='<td><span style="font-size:9px;font-weight:700;color:'+stColor+'">'+stTxt+'</span></td>';
+            h+='</tr>';
+          });
+          h+='</tbody></table>';
+        }
+        h+='</div>';
+      });
+    }
+    h+='</div>';
+  });
+
+  /* ===== 5 CURSOS TRANSVERSALES ===== */
+  const CURSOS_TRANS=[
+    {name:'Actividades Interactivas',types:[3,4],emoji:'\ud83e\udde9',color:'#0891b2',bg:'linear-gradient(135deg,#ecfeff,#cffafe)',sub:['Casos cl\u00ednicos interactivos (+25)','Diagn\u00f3stico por imagen (+10)','Estad\u00edsticas (+30)','Flashcards interactivas (+100)']},
+    {name:'Tarjetas de Repaso',types:[5],emoji:'\ud83c\udccf',color:'#ca8a04',bg:'linear-gradient(135deg,#fefce8,#fef9c3)',sub:['Ejercicios de ingl\u00e9s (+10)','Memoramas (+22)','Puntos ENARM (+12)','Tarjetas de repaso (+90)']},
+    {name:'Videoclases',types:[],emoji:'\ud83c\udfac',color:'#7c3aed',bg:'linear-gradient(135deg,#f5f3ff,#ede9fe)',sub:['+25 videoclases formato taller','Cada 15 d\u00edas en F2, semanal en repaso final']},
+    {name:'Ex\u00e1menes Semanales',types:[6],emoji:'\u26a0\ufe0f',color:'#f59e0b',bg:'linear-gradient(135deg,#fef3c7,#fff7ed)',sub:['+50 ex\u00e1menes de 100 preguntas (+4,500 reactivos)','Disponibles cada s\u00e1bado']},
+    {name:'Simuladores',types:[7],emoji:'\ud83c\udfaf',color:'#dc2626',bg:'linear-gradient(135deg,#fef2f2,#fee2e2)',sub:['+6 simuladores de 280 preguntas (+1,400 reactivos)','Cada 8 sem en F1, mensual en F2, final en F3']}
+  ];
+
+  h+='<div style="margin-top:32px;border-top:2px solid #e2e8f0;padding-top:20px"><div style="font-size:18px;font-weight:900;color:#1e293b;margin-bottom:4px">5 Cursos Transversales</div><div style="font-size:11px;color:#64748b;margin-bottom:16px">Actividades complementarias de pr\u00e1ctica, repaso y evaluaci\u00f3n</div>';
+
+  h+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">';
+  CURSOS_TRANS.forEach(ct=>{
+    let cnt=0;
+    ct.types.forEach(ti=>{const seen={};items.forEach(i=>{if(i.ti===ti&&!seen[i.nm]){seen[i.nm]=1;cnt++;}});orig.forEach(a=>{if(a.ti===ti&&!seen[a.nm]){seen[a.nm]=1;cnt++;}});});
+    h+='<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;border-left:3px solid '+ct.color+'"><div style="font-size:11px;font-weight:800;color:#1e293b">'+ct.emoji+' '+ct.name+'</div><div style="font-size:9px;color:#94a3b8;margin-top:2px">'+(cnt>0?cnt+' en calendario':'Pr\u00f3ximamente')+'</div></div>';
+  });
+  h+='</div>';
+
+  CURSOS_TRANS.forEach(ct=>{
+    const allAct={};
+    ct.types.forEach(ti=>{
+      items.forEach(i=>{if(i.ti===ti){if(!allAct[i.nm])allAct[i.nm]={cal:[],orig:[],ti:ti};allAct[i.nm].cal.push(i);}});
+      orig.forEach(a=>{if(a.ti===ti){if(!allAct[a.nm])allAct[a.nm]={cal:[],orig:[],ti:ti};allAct[a.nm].orig.push(a);}});
+    });
+    const actNames=Object.keys(allAct).sort((a,b)=>{const na=a.match(/\d+/),nb=b.match(/\d+/);return (na?parseInt(na[0]):999)-(nb?parseInt(nb[0]):999)||a.localeCompare(b);});
+    const filtered=ql?actNames.filter(nm=>nm.toLowerCase().includes(ql)||ct.name.toLowerCase().includes(ql)):actNames;
+
+    const cKey='ct_'+ct.name;const isOpen=idxOpen[cKey]||false;
+
+    h+='<div class="idx-tronco" style="margin-top:12px"><div class="idx-tronco-hdr" style="background:'+ct.bg+';border-left-color:'+ct.color+'" onclick="idxOpen[\''+cKey+'\']=!idxOpen[\''+cKey+'\'];renderIdx();"><span class="arrow">'+(isOpen?'\u25bc':'\u25b6')+'</span><span style="width:8px;height:8px;border-radius:50%;background:'+ct.color+';flex-shrink:0"></span>'+ct.emoji+' '+ct.name+'<span class="cnt">'+filtered.length+' elementos</span></div>';
+
+    if(isOpen){
+      if(ct.sub&&ct.sub.length>0){
+        h+='<div style="padding:8px 16px 4px;display:flex;flex-wrap:wrap;gap:6px">';
+        ct.sub.forEach(s=>{h+='<span style="font-size:9px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:3px 8px;color:#475569">'+s+'</span>';});
+        h+='</div>';
+      }
+      if(filtered.length>0){
+        h+='<table class="idx-table"><thead><tr><th style="width:300px">Nombre</th><th>Tipo</th><th>Semana</th><th>D\u00eda</th><th>Estado</th><th>URL</th></tr></thead><tbody>';
+        filtered.forEach(nm=>{
+          const d=allAct[nm];
+          const calItem=d.cal[0];const origItem=d.orig[0];const item=calItem||origItem;
+          const tiIdx=d.ti;const tipo=TN[tiIdx]||'';
+          const sem=item?'S'+(item.s+1):'\u2014';
+          const dia=item?['Lun','Mar','Mi\u00e9','Jue','Vie','S\u00e1b','Dom'][item.d]||'\u2014':'\u2014';
+          
+          const es=calItem?(calItem.es===0?'\u2713 Listo':'Pendiente'):'No asignado';
+          const esColor=calItem?(calItem.es===0?'#10b981':'#f59e0b'):'#94a3b8';
+          const url=item&&item.url?'<a href="'+item.url+'" target="_blank" style="color:#0ea5e9;font-size:10px">\u2197 Abrir</a>':'\u2014';
+          h+='<tr><td class="idx-tema" style="color:'+ct.color+';font-weight:600">'+nm+'</td><td style="text-align:center;font-size:9px;color:#64748b">'+TE[tiIdx]+' '+tipo+'</td><td style="text-align:center;font-size:10px">'+sem+'</td><td style="text-align:center;font-size:10px">'+dia+'</td><td><span style="font-size:9px;font-weight:700;color:'+esColor+'">'+es+'</span></td><td style="text-align:center">'+url+'</td></tr>';
+        });
+        h+='</tbody></table>';
+      } else {
+        h+='<div style="padding:12px 16px;font-size:11px;color:#94a3b8;font-style:italic">No hay elementos asignados en este calendario a\u00fan</div>';
+      }
+    }
+    h+='</div>';
+  });
+  h+='</div>';
+
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  // Si estamos en Apps Script, cargar R desde Sheets
+  if(typeof google!=='undefined'&&google.script){
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Inter,sans-serif"><div style="text-align:center"><div style="width:40px;height:40px;border:3px solid #e2e8f0;border-top-color:#0ea5e9;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto"></div><p style="margin-top:16px;color:#64748b;font-size:14px;font-weight:600">Cargando desde Google Sheets...</p></div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+    google.script.run
+      .withSuccessHandler(function(data){
+        if(data){R=data;load('completo');}
+        else{document.body.innerHTML='<p style="padding:40px;font-family:Inter;color:red">Error: No se encontraron datos en Sheets. Ejecuta migrateFromR() primero.</p>';}
+      })
+      .withFailureHandler(function(e){
+        document.body.innerHTML='<p style="padding:40px;font-family:Inter;color:red">Error al cargar de Sheets: '+e.message+'</p>';
+      })
+      .loadR();
+  } else {
+    // Modo local: R ya debe estar definido en el HTML
+    if(R) load('completo');
+    else document.body.innerHTML='<p style="padding:40px;font-family:Inter;color:red">R no definido. Usa la versión con datos embebidos o despliega como Web App.</p>';
+  }
+});
+</script>
+</body>
+</html>
