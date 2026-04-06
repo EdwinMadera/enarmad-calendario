@@ -177,8 +177,8 @@ select:focus,input:focus,textarea:focus{border-color:var(--pc);outline:none;back
     </div>
     <input type="file" id="impF" class="hidden" accept=".json" onchange="importJSON(event)">
     <button class="w-full py-1 text-slate-400 hover:text-red-500 text-[10px] transition-colors" onclick="resetCal()">Restaurar</button>
-    <button class="w-full py-1.5 mt-1 bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] font-semibold rounded-md transition-colors" onclick="cloudMigrate()">&#9729; Migrar a Sheets</button>
-    <button class="w-full py-1 text-blue-400 hover:text-blue-600 text-[10px] transition-colors" onclick="cloudSave().then(()=>toast('Sincronizado'))">&#9729; Forzar Sync</button>
+    <button class="w-full py-1.5 mt-1 bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] font-semibold rounded-md transition-colors" onclick="cloudSave().then(()=>toast('Sincronizado'))">&#9729; Forzar Sync</button>
+    <button class="w-full py-1 text-blue-400 hover:text-blue-600 text-[10px] transition-colors" onclick="load(cK).then(()=>toast('Datos recargados'))">&#8635; Recargar datos</button>
   </div>
 </div>
 
@@ -341,12 +341,14 @@ let cK='completo',cW=1,cP=0,items=[],orig=[],meta=null,drag=null,editIt=null,sor
 
 /* ===== CLOUD SYNC (Google Sheets via Apps Script) ===== */
 const API_URL='https://script.google.com/macros/s/AKfycbzpnZoNNPLpQaLQ0zOdnpcR7CilolK3hmM4q5Xs9Qlkm1k9M1CfLKX6nv8UK8is7rqW/exec';
-let cloudOK=API_URL&&!API_URL.includes('%%');
+let cloudOK=true;
 let syncing=false;
+let saveTimer=null;
 
 async function cloudSave(){
   if(!cloudOK||syncing)return;
   syncing=true;
+  upSyncBadge('sync');
   try{
     const st=items.map(i=>({id:i.id,s:i.s,d:i.d,done:!!i.done,nm:i.nm,url:i.url||'',es:i.es,pr:i.pr,ti:i.ti,ar:i.ar,tr:i.tr,nota:i.nota||'',isNew:!!i.isNew,ord:i.ord!=null?i.ord:0}));
     await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'saveProgress',cal:cK,items:st}),redirect:'follow'});
@@ -355,9 +357,12 @@ async function cloudSave(){
   finally{syncing=false;}
 }
 
+function debouncedCloudSave(){if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(cloudSave,2000);}
+
 async function cloudLoad(k){
   if(!cloudOK)return null;
   try{
+    upSyncBadge('loading');
     const r=await fetch(API_URL+'?action=loadProgress&cal='+encodeURIComponent(k),{redirect:'follow'});
     const d=await r.json();
     if(Array.isArray(d)&&d.length>0){upSyncBadge('ok');return d;}
@@ -365,21 +370,12 @@ async function cloudLoad(k){
   return null;
 }
 
-async function cloudMigrate(){
-  if(!cloudOK)return toast('Configura API_URL primero');
-  toast('Migrando datos a Google Sheets...');
-  try{
-    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'migrate',data:R}),redirect:'follow'});
-    const d=await r.json();
-    if(d.ok)toast('Migrado: '+d.names+' nombres, '+(d.calendars||[]).length+' calendarios');
-    else toast('Error: '+(d.error||'desconocido'));
-  }catch(e){toast('Error: '+e.message);}
-}
-
 function upSyncBadge(s){
   const el=document.getElementById('syncBadge');if(!el)return;
-  if(s==='ok'){el.textContent='\u2601 Sync';el.className='px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700';}
+  if(s==='ok'){el.textContent='\u2601 Sync \u2713';el.className='px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700';}
   else if(s==='err'){el.textContent='\u2601 Error';el.className='px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700';}
+  else if(s==='sync'){el.textContent='\u2601 Guardando...';el.className='px-1.5 py-0.5 rounded text-[9px] font-bold bg-yellow-100 text-yellow-700 animate-pulse';}
+  else if(s==='loading'){el.textContent='\u2601 Cargando...';el.className='px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 animate-pulse';}
   else{el.textContent='\u2601 Local';el.className='px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-500';}
 }
 
@@ -389,39 +385,45 @@ function dec(k){
   return c.data.map(r=>({id:r[0],s:r[1],d:r[2],tr:r[3],ar:r[4],ti:r[5],nm:R.N[r[6]]||'Tema '+r[6],pr:r[7],url:R.U[r[8]]||'',es:r[9],done:false,nota:''}));
 }
 function dataVer(k){return 'v2_'+R.C[k].data.length+'_'+R.C[k].total;}
-function load(k){
+async function load(k){
   cK=k;meta=R.C[k];
   const d=dec(k);orig=JSON.parse(JSON.stringify(d));items=d;
-  const vk='ea10_ver_'+k,cv=dataVer(k);
-  const oldVer=localStorage.getItem(vk);
-  if(oldVer!==cv){localStorage.removeItem(sk());localStorage.setItem(vk,cv);console.log('Data updated, localStorage cleared for',k);}
-  const s=localStorage.getItem(sk());
-  if(s){try{
-    const sv=JSON.parse(s),m={};sv.forEach(x=>m[x.id]=x);
-    items.forEach(i=>{if(m[i.id]){i.s=m[i.id].s;i.d=m[i.id].d;i.done=!!m[i.id].done;if(m[i.id].nm)i.nm=m[i.id].nm;if(m[i.id].url!==undefined)i.url=m[i.id].url;if(m[i.id].es!==undefined)i.es=m[i.id].es;if(m[i.id].pr!==undefined)i.pr=m[i.id].pr;if(m[i.id].ti!==undefined)i.ti=m[i.id].ti;if(m[i.id].ar!==undefined)i.ar=m[i.id].ar;if(m[i.id].tr!==undefined)i.tr=m[i.id].tr;if(m[i.id].nota)i.nota=m[i.id].nota;if(m[i.id].ord!=null)i.ord=m[i.id].ord;}});
-    sv.filter(x=>x.isNew&&!items.find(i=>i.id===x.id)).forEach(x=>items.push({...x}));
-  }catch(e){}}
-  cW=1;cP=0;buildUI();
-  // Async: try cloud load and merge
-  cloudLoad(k).then(cloud=>{
-    if(!cloud||!cloud.length)return;
-    const m={};cloud.forEach(x=>m[x.id]=x);
-    let changed=false;
+  function applyOverrides(src){
+    const m={};src.forEach(x=>m[x.id]=x);
     items.forEach(i=>{if(m[i.id]){
-      if(m[i.id].done&&!i.done){i.done=true;changed=true;}
-      if(m[i.id].nota&&!i.nota){i.nota=m[i.id].nota;changed=true;}
-      if(m[i.id].s!==i.s){i.s=m[i.id].s;i.d=m[i.id].d;changed=true;}
-      if(m[i.id].ord!=null&&i.ord==null){i.ord=m[i.id].ord;changed=true;}
-      if(m[i.id].es!==undefined&&m[i.id].es!==i.es){i.es=m[i.id].es;changed=true;}
-      if(m[i.id].pr!==undefined&&m[i.id].pr!==i.pr){i.pr=m[i.id].pr;changed=true;}
+      i.s=m[i.id].s;i.d=m[i.id].d;i.done=!!m[i.id].done;
+      if(m[i.id].nm)i.nm=m[i.id].nm;
+      if(m[i.id].url!==undefined)i.url=m[i.id].url;
+      if(m[i.id].es!==undefined)i.es=m[i.id].es;
+      if(m[i.id].pr!==undefined)i.pr=m[i.id].pr;
+      if(m[i.id].ti!==undefined)i.ti=m[i.id].ti;
+      if(m[i.id].ar!==undefined)i.ar=m[i.id].ar;
+      if(m[i.id].tr!==undefined)i.tr=m[i.id].tr;
+      if(m[i.id].nota)i.nota=m[i.id].nota;
+      if(m[i.id].ord!=null)i.ord=m[i.id].ord;
     }});
-    if(changed){localStorage.setItem(sk(),JSON.stringify(items.map(i=>({id:i.id,s:i.s,d:i.d,done:!!i.done,nm:i.nm,url:i.url||'',es:i.es,pr:i.pr,ti:i.ti,ar:i.ar,tr:i.tr,nota:i.nota||'',isNew:!!i.isNew,ord:i.ord!=null?i.ord:0}))));render();}
-  });
+    src.filter(x=>x.isNew&&!items.find(i=>i.id===x.id)).forEach(x=>items.push({...x}));
+  }
+  // GitHub es la fuente principal
+  const cloud=await cloudLoad(k);
+  if(cloud&&cloud.length>0){
+    applyOverrides(cloud);
+    localStorage.setItem(sk(),JSON.stringify(items.map(i=>({id:i.id,s:i.s,d:i.d,done:!!i.done,nm:i.nm,url:i.url||'',es:i.es,pr:i.pr,ti:i.ti,ar:i.ar,tr:i.tr,nota:i.nota||'',isNew:!!i.isNew,ord:i.ord!=null?i.ord:0}))));
+  }else{
+    // Fallback: localStorage
+    const vk='ea10_ver_'+k,cv=dataVer(k);
+    const oldVer=localStorage.getItem(vk);
+    if(oldVer!==cv){localStorage.removeItem(sk());localStorage.setItem(vk,cv);}
+    const s=localStorage.getItem(sk());
+    if(s){try{const sv=JSON.parse(s);applyOverrides(sv);}catch(e){}}
+    upSyncBadge('local');
+  }
+  cW=1;cP=0;buildUI();
 }
 function save(){
   const st=items.map(i=>({id:i.id,s:i.s,d:i.d,done:!!i.done,nm:i.nm,url:i.url||'',es:i.es,pr:i.pr,ti:i.ti,ar:i.ar,tr:i.tr,nota:i.nota||'',isNew:!!i.isNew,ord:i.ord!=null?i.ord:0}));
   localStorage.setItem(sk(),JSON.stringify(st));
-  cloudSave(); // async sync to Google Sheets
+  debouncedCloudSave();
 }
 function gP(w){if(!meta)return 0;let c=0;for(let i=0;i<meta.fases.length;i++){c+=meta.fases[i].semanas;if(w<=c)return i;}return meta.fases.length-1;}
 function buildUI(){buildCalTabs();buildPTabs();buildSb();popFilters();popPanel();upCD();updSortBtn();render();}
@@ -806,7 +808,7 @@ function exportExcel(){
 }
 function exportJSON(){const b=new Blob([JSON.stringify(items,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`enarmad_${cK}.json`;a.click();toast('Guardado');}
 function importJSON(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{items=JSON.parse(ev.target.result);save();buildSb();render();renderPanel();toast('Importado');}catch(err){toast('Error');}};r.readAsText(f);e.target.value='';}
-function resetCal(){if(confirm('\u00bfRestaurar todo?')){localStorage.removeItem(sk());load(cK);toast('Restaurado');}}
+function resetCal(){if(confirm('\u00bfRestaurar todo?')){localStorage.removeItem(sk());load(cK).then(()=>toast('Restaurado'));}}
 function toast(m){const t=document.getElementById('toast');document.getElementById('toastMsg').textContent=m;t.classList.remove('opacity-0','translate-y-2','pointer-events-none');setTimeout(()=>t.classList.add('opacity-0','translate-y-2','pointer-events-none'),2500);}
 
 
