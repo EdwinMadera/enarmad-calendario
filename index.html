@@ -297,6 +297,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--pc);outline:none;back
         <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Estado</label><select id="eEs" class="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-semibold"></select></div>
         <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Prioridad</label><select id="ePr" class="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-semibold"></select></div>
       </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Semana <span class="text-slate-300 normal-case">(0 = sin asignar)</span></label><input id="eSem" type="number" min="0" class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-semibold"></div>
+        <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Día</label><select id="eDia" class="w-full px-1.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-[10px] font-semibold"><option value="0">Lun</option><option value="1">Mar</option><option value="2">Mié</option><option value="3">Jue</option><option value="4">Vie</option><option value="5">Sáb</option><option value="6">Dom</option></select></div>
+      </div>
       <div><label class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Notas</label><textarea id="eNota" rows="2" class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-xs resize-none" placeholder="..."></textarea></div>
     </div>
     <div class="px-5 py-3 border-t border-slate-100 flex justify-between bg-slate-50">
@@ -451,6 +455,17 @@ function buildSb(){
   const nav=document.getElementById('sbNav');if(!meta)return;
   if(!window.sbOpen)window.sbOpen={};
   let h='',c=0;
+  // "Sin asignar" bucket: items en semana 0 (sin semana válida) — visibles y contables
+  const unTotal=items.filter(i=>i.s===0).length;
+  if(unTotal>0){
+    const unDone=items.filter(i=>i.s===0&&i.done).length;
+    const onU=cW===0;
+    h+=`<div class="flex items-center gap-2 px-2 py-2 rounded-md cursor-pointer transition-all mb-1 ${onU?'bg-amber-50 shadow-sm':'hover:bg-slate-50'}" onclick="setW(0)" title="${unDone}/${unTotal} listos">
+      <span class="w-2 h-2 rounded-full shrink-0" style="background:#f59e0b"></span>
+      <span class="text-[10px] font-bold ${onU?'text-amber-700':'text-slate-600'} flex-1 truncate">⚠ Sin asignar</span>
+      <span class="text-[9px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">${unTotal}</span>
+    </div>`;
+  }
   meta.fases.forEach((f,fi)=>{
     // Auto-open the phase that contains the current week
     const fStart=c+1,fEnd=c+f.semanas;
@@ -697,13 +712,21 @@ function openMo(id){
   document.getElementById('eNom').value=editIt.nm||'';document.getElementById('eUrl').value=editIt.url||'';
   document.getElementById('eTi').value=editIt.ti;document.getElementById('eEs').value=editIt.es;
   document.getElementById('ePr').value=editIt.pr;document.getElementById('eNota').value=editIt.nota||'';
+  document.getElementById('eSem').value=editIt.s;document.getElementById('eDia').value=editIt.d;
 }
 function closeMo(){document.getElementById('editMo').classList.add('hidden');document.getElementById('editMo').classList.remove('flex');editIt=null;}
 function saveMo(){
   if(!editIt)return;editIt.nm=document.getElementById('eNom').value;editIt.url=document.getElementById('eUrl').value;
   editIt.ti=parseInt(document.getElementById('eTi').value);editIt.es=parseInt(document.getElementById('eEs').value);
   editIt.pr=parseInt(document.getElementById('ePr').value);editIt.nota=document.getElementById('eNota').value;
-  save();closeMo();render();renderPanel();toast('Guardado');
+  const maxW=meta?meta.fases.reduce((a,f)=>a+f.semanas,0):0;
+  let ns=parseInt(document.getElementById('eSem').value);if(isNaN(ns)||ns<0)ns=0;if(ns>maxW)ns=maxW;
+  let nd=parseInt(document.getElementById('eDia').value);if(isNaN(nd)||nd<0||nd>6)nd=0;
+  if(ns!==editIt.s||nd!==editIt.d){
+    const maxOrd=items.filter(x=>x.s===ns&&x.d===nd&&x.id!==editIt.id).reduce((mx,x)=>Math.max(mx,x.ord!=null?x.ord:0),0);
+    editIt.s=ns;editIt.d=nd;editIt.ord=maxOrd+1;
+  }
+  save();closeMo();buildSb();render();renderPanel();toast('Guardado');
 }
 function delCard(){if(editIt&&confirm('\u00bfBorrar?')){items=items.filter(i=>i.id!==editIt.id);save();closeMo();buildSb();render();renderPanel();toast('Borrado');}}
 
